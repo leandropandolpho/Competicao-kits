@@ -1,48 +1,53 @@
-# Testes objetivos da competição de kits — RASCUNHO NÃO CONGELADO v0.1
-# Roda em Windows real. Primeiro valida o próprio harness (nulo = 0/40, oráculo = 40/40);
-# só depois roda os kits anonimizados em kits/kit-A ... kits/kit-D. Logs e resultados ficam públicos.
+# Testes objetivos da competição de kits — RASCUNHO NÃO CONGELADO v0.2
+# 1) Valida o próprio script de teste no Windows (nulo, oráculo, trapaceiro e mutantes).
+# 2) Só se a validação passar, roda cada kit anonimizado (kits/kit-A ... kits/kit-D) num job separado.
+# Os kits devem estar commitados em kits/<kit-X>/ antes de disparar o workflow.
 name: competicao-kits
 on:
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: pwsh
+
 jobs:
-  testes:
+  validar-harness:
     runs-on: windows-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: pwsh
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Registrar hashes do harness
+      - uses: actions/checkout@v7
+      - name: Registrar hashes dos arquivos do pacote
         run: |
-          Get-ChildItem testes -Recurse -File | Get-FileHash -Algorithm SHA256 |
-            ForEach-Object { "{0}  {1}" -f $_.Hash, (Resolve-Path -Relative $_.Path) }
-
-      - name: Validar o harness (nulo deve dar 0/40, oráculo deve dar 40/40)
+          Get-ChildItem -Recurse -File -Exclude *.md | Where-Object FullName -notmatch '\\.git\\' |
+            Get-FileHash -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash, (Resolve-Path -Relative $_.Path) }
+      - name: Validar o script de teste
         run: |
           git config --global init.defaultBranch main
-          foreach ($v in 'nulo','oraculo') {
-            $k = "val/$v"; New-Item -ItemType Directory -Force $k | Out-Null
-            Copy-Item "testes/validacao/controlador-$v.ps1" "$k/controlador.ps1"
-            pwsh -NoProfile -File testes/run-cenarios.ps1 -KitDir $k -SaidaDir "saida/validacao-$v"
-          }
-          $n = (Get-Content saida/validacao-nulo/resultados.json -Raw | ConvertFrom-Json).pontos_objetivos
-          $o = (Get-Content saida/validacao-oraculo/resultados.json -Raw | ConvertFrom-Json).pontos_objetivos
-          "nulo=$n oraculo=$o"
-          if ($n -ne 0 -or $o -ne 40) { throw "Harness inválido no Windows: nulo=$n oraculo=$o" }
-
-      - name: Rodar os kits
-        run: |
-          if (-not (Test-Path kits)) { 'Nenhum kit ainda (pasta kits/ ausente).'; return }
-          Get-ChildItem kits -Directory | ForEach-Object {
-            pwsh -NoProfile -File testes/run-cenarios.ps1 -KitDir $_.FullName -SaidaDir "saida/$($_.Name)"
-          }
-
-      - name: Publicar resultados brutos
+          pwsh -NoProfile -File testes/validacao/validar-harness.ps1 -SaidaDir saida/validacao
+      - uses: actions/upload-artifact@v7
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: resultados-objetivos
+          name: validacao-harness
+          path: saida/validacao/resultados/
+
+  kits:
+    needs: validar-harness
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        kit: [kit-A, kit-B, kit-C, kit-D]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rodar os 8 cenários
+        run: |
+          git config --global init.defaultBranch main
+          if (-not (Test-Path "kits/${{ matrix.kit }}/controlador.ps1")) { "kits/${{ matrix.kit }} ausente: nada a testar."; exit 0 }
+          pwsh -NoProfile -File testes/run-cenarios.ps1 -KitDir "kits/${{ matrix.kit }}" -SaidaDir "saida/${{ matrix.kit }}"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: resultados-${{ matrix.kit }}
           path: saida/
+          if-no-files-found: ignore
