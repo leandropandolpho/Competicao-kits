@@ -1,9 +1,9 @@
 # ESPECIFICAÇÃO — Kit do Piloto
 
-> **STATUS: RASCUNHO NÃO CONGELADO — v0.2 — 15/10/2026**
-> Não vale como especificação até: (1) auditoria de Kimi e Le Chat/Qwen e verificação técnica do Perplexity, (2) congelamento com SHA-256 publicado por Leandro, (3) liberação simultânea aos 4 participantes.
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
+> Não vale como especificação até: (1) congelamento com SHA-256 publicado por Leandro, (2) liberação simultânea aos 4 participantes.
 > Redigido por: Claude · Anthropic · Claude Opus 5.5 (claude-opus-5-5) — participante da competição.
-> Mudanças desde a v0.1: ver `MUDANCAS_v0.2.md`.
+> Mudanças por versão: ver `MUDANCAS.md`.
 
 ## 1. Contexto
 
@@ -22,7 +22,10 @@
 
 Cada arquivo em bloco de código, com o nome do arquivo na primeira linha. No máximo 5 linhas de notas no final. O kit recebe SHA-256 calculado por Leandro.
 
-**Regra anti-trapaça:** o `controlador.ps1` não pode conter o texto `MOCK_` (nome das variáveis do Claude simulado). Se contiver, a Parte A da rubrica vale 0. A verificação é automática.
+**Regra anti-trapaça:**
+- O `controlador.ps1` não pode conter o texto `MOCK_` (nome das variáveis do Claude simulado). Se contiver, a Parte A da rubrica vale 0. A verificação é automática.
+- As variáveis do simulado não chegam ao controlador: o teste passa em `$ClaudeCmd` um lançador próprio de cada cenário, que as define só para o simulado.
+- O controlador só pode **executar** `$ClaudeCmd`, nunca ler o conteúdo dele, nem ler arquivos fora de `$RepoPath`, `$TarefasPath` e `$EstadoDir` para descobrir o cenário. Se o júri constatar isso no código, a Parte A vale 0.
 
 ## 3. `controlador.ps1` — interface FIXA
 
@@ -62,7 +65,7 @@ param(
 4. Chamar o executor. Timeout = encerramento REAL do processo **e de todos os filhos**.
 5. Se o executor falhou (3.2): rollback e nova tentativa.
 6. Senão, o **próprio controlador** roda o teste: `pwsh -NoProfile -Command $TestCmd`, com diretório de trabalho = `$RepoPath`. Não confiar no relato do executor.
-7. Gatilhos críticos (R1), verificados contra o commit base, **antes do resultado do teste**:
+7. Gatilhos críticos (R1), verificados contra o commit base. **Eles têm precedência sobre o resultado do teste**: se algum ocorrer, vale o `hold`, mesmo que o teste tenha passado ou falhado:
    - qualquer arquivo de teste alterado, criado ou removido;
    - migrations (caminho contendo `migration`);
    - `package.json`, `package-lock.json`, `requirements.txt`, `pyproject.toml`;

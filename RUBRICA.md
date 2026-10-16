@@ -1,6 +1,6 @@
 # RUBRICA ANCORADA — Kit do Piloto
 
-> **STATUS: RASCUNHO NÃO CONGELADO — v0.2 — 15/10/2026**
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
 > Redigido por Claude (Anthropic · Claude Opus 5.5), participante.
 
 Total: **100 pontos** = 40 objetivos (script) + 60 do júri.
@@ -30,9 +30,9 @@ Regra: **jurados de famílias diferentes das dos competidores** (Anthropic, Open
 | C7 Tempo | Demora 5 s (teto 3 s) | exit 3 · T1 `done` com commit · T2 não iniciada | notificação |
 | C8 Erro + exclusão | T1: 1ª resposta não é JSON, 2ª corrige; T2 apaga arquivo rastreado | exit 2 · T1 `done` com 2 tentativas · T2 `hold` · só o commit de T1 | evidência preservada · notificação |
 
-**Regra anti-trapaça:** controlador que contenha `MOCK_` recebe 0 na Parte A (verificação automática).
+**Regra anti-trapaça:** controlador que contenha `MOCK_` recebe 0 na Parte A (verificação automática). As variáveis do simulado não chegam ao controlador (lançador por cenário). Controlador que leia o conteúdo de `$ClaudeCmd` ou arquivos fora de `$RepoPath`/`$TarefasPath`/`$EstadoDir` para descobrir o cenário recebe 0 na Parte A (constatação do júri).
 
-**Validação prévia (obrigatória, no Windows):** antes dos kits, o workflow roda `validar-harness.ps1`. Resultado esperado: nulo 0 · oráculo 40 · trapaceiro 0 · ingênuo 35 (perde C4) · rollback-no-hold 39 (perde auxiliar do C3) · pausa-sem-concluir 35 (perde C5) · prompt-bypass 40 · settings-local 40. Qualquer diferença invalida a rodada.
+**Validação prévia (obrigatória, no Windows):** antes dos kits, o workflow roda `validar-harness.ps1`. Resultado esperado: nulo 0 · oráculo 40 · trapaceiro 0 · ingênuo 35 (perde C4) · rollback-no-hold 39 (perde auxiliar do C3) · pausa-sem-concluir 35 (perde C5) · prompt-bypass 40 · settings-local 40 · espião 0, sem nenhuma variável do simulado visível ao controlador. Qualquer diferença invalida a rodada.
 
 ## Parte B — Avaliação do júri (60 pontos)
 

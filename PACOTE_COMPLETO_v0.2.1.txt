@@ -1,14 +1,14 @@
-PACOTE DA COMPETIÇÃO DE KITS — RASCUNHO NÃO CONGELADO v0.2 — 15/10/2026
+PACOTE DA COMPETIÇÃO DE KITS — v0.2.1, CANDIDATA AO CONGELAMENTO — 16/10/2026
 Redigido por Claude (Anthropic · Claude Opus 5.5), participante. Todos os arquivos do pacote, concatenados, com SHA-256.
 
 ==================================================================
-ARQUIVO: LEIA-ME.md   (SHA-256: 9cb81befd240ee83008e02517535fac863445f12fc28287bcfa28308a15fa491)
+ARQUIVO: LEIA-ME.md   (SHA-256: 933a7a3245444e86710e17ca4093d93bc84c34f013e8019914447b4507116294)
 ==================================================================
-# Pacote da competição de kits — RASCUNHO NÃO CONGELADO v0.2
+# Pacote da competição de kits — v0.2.1, CANDIDATA AO CONGELAMENTO
 
-> **Não distribuir aos competidores. Não iniciar nenhum kit com base neste rascunho.**
+> **Não distribuir aos competidores antes do congelamento.**
 > Redigido por: Claude · Anthropic · Claude Opus 5.5 (claude-opus-5-5), que também é participante.
-> Data: 15/10/2026. Esta é a **última rodada de auditoria**: aprovado → ajustes finais → congelamento com SHA-256 publicado por Leandro → liberação simultânea.
+> Data: 16/10/2026. A v0.2 foi aprovada pelos jurados (Kimi: aprovado; Le Chat/Vibe: aprovado com ajustes). Esta versão aplica só os ajustes finais. Próximo passo: congelamento com SHA-256 publicado por Leandro → liberação simultânea.
 
 ## Conteúdo
 
@@ -17,14 +17,16 @@ ARQUIVO: LEIA-ME.md   (SHA-256: 9cb81befd240ee83008e02517535fac863445f12fc28287b
 | `ESPECIFICACAO.md` | O que cada kit deve entregar, com a interface FIXA do `controlador.ps1` |
 | `RUBRICA.md` | 40 pontos objetivos (8 cenários) + 60 do júri, com âncoras e papéis |
 | `REFERENCIA_CLAUDE_CODE.md` | Fatos atuais do Claude Code, com link e seção da documentação oficial |
-| `MUDANCAS_v0.2.md` | O que mudou desde a v0.1 e por quê |
+| `MUDANCAS.md` | O que mudou em cada versão e por quê |
 | `testes/run-cenarios.ps1` | Script dos 8 cenários |
-| `testes/mock/fake-claude.*` | Claude Code simulado, guiado por um plano por tarefa |
+| `testes/mock/fake-claude.ps1` | Claude Code simulado, guiado por um plano por tarefa (o teste cria um lançador por cenário; `fake-claude.cmd`/`.sh` são só para uso manual) |
 | `testes/validacao/validar-harness.ps1` | Prova que o script pontua certo (nulo, oráculo, trapaceiro, mutantes) |
 | `testes/validacao/controlador-nulo.ps1` | Não faz nada; deve tirar 0/40 |
+| `testes/validacao/controlador-espiao.ps1` | Procura as variáveis do simulado; prova que elas não chegam ao controlador |
 | `testes/validacao/controlador-oraculo.ps1` | Trapaceia de propósito (lê o cenário); com mutantes, prova que o script reprova onde deve |
 | `.github/workflows/competicao.yml` | GitHub Actions, `windows-latest`: valida o script e depois roda um job por kit |
-| `PACOTE_COMPLETO_RASCUNHO_v0.2.txt` | Todos os arquivos acima num único texto, com SHA-256 |
+| `PACOTE_COMPLETO_v0.2.1.txt` | Todos os arquivos acima num único texto, com SHA-256 |
+| `SHA256_v0.2.1.txt` | Lista de SHA-256 para o congelamento |
 
 ## Validação já feita (Linux, PowerShell 7.4.6)
 
@@ -38,13 +40,40 @@ ARQUIVO: LEIA-ME.md   (SHA-256: 9cb81befd240ee83008e02517535fac863445f12fc28287b
 | pausa-sem-concluir | 35 | 35 | C5 |
 | prompt-bypass | 40 | 40 | — (M1 corrigido) |
 | settings-local | 40 | 40 | — (M4 corrigido) |
+| espião | 0, sem variáveis do simulado visíveis | 0, nenhuma visível nos 8 cenários | tudo |
 
 No Windows, a mesma validação é o primeiro job do workflow, que para tudo se qualquer número diferir.
 
+## Como rodar os kits
+1. Commitar cada kit anonimizado em `kits/kit-A/` … `kits/kit-D/` (com `controlador.ps1` e `.claude/settings.json`). Kit ausente é pulado sem erro.
+2. No GitHub, aba **Actions** → `competicao-kits` → **Run workflow**.
+3. Baixar os artefatos `resultados-kit-X` (pontuação em `resultados.json`).
+
 ==================================================================
-ARQUIVO: MUDANCAS_v0.2.md   (SHA-256: c2f4f08504a6f2f7ad1370d0d59dfc4037ad48d0580f290cf5d582740602ea44)
+ARQUIVO: MUDANCAS.md   (SHA-256: 3d3a2ba51697e0f2dbfcd8edf023de9eae210a4af83c8011ebbbca2ed5897766)
 ==================================================================
-# Mudanças da v0.1 para a v0.2 — RASCUNHO NÃO CONGELADO
+# Mudanças
+
+## v0.2 → v0.2.1 (16/10/2026) — ajustes finais, candidata ao congelamento
+
+Vereditos da v0.2: **Kimi (Moonshot) APROVADO**; **Le Chat/Vibe (executou GLM-5, da Z.ai) APROVADO COM AJUSTES**. Nenhum defeito que mude pontuação. Pela regra do processo, não há nova rodada de auditoria.
+
+| Origem | Ajuste | O que foi feito |
+|---|---|---|
+| Le Chat A3/A4 | As variáveis `MOCK_*` eram herdadas pelo controlador; a regra anti-trapaça era só textual | Cada cenário recebe um lançador próprio (`claude.cmd`/`claude.sh`, fora do repositório) que define as variáveis só para o simulado. O controlador não as enxerga. O nome do cenário não aparece no lançador. Novo caso de validação **espião** (procura as variáveis sem escrever o prefixo): 0 pts e nenhuma variável visível nos 8 cenários. Regra nova: ler o conteúdo de `$ClaudeCmd` ou arquivos fora dos parâmetros para descobrir o cenário zera a Parte A (constatação do júri) |
+| Le Chat A1 | Redação do passo 7 (gatilhos R1) | Agora diz explicitamente que os gatilhos têm precedência sobre o resultado do teste |
+| Le Chat A5 | Citar o texto exato de dois itens | `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` e `Remove-Item`: texto da documentação oficial colado na referência (reconferido em 16/10/2026) |
+| Le Chat A7 | O passo de hashes do workflow excluía `*.md` | Agora registra todos os arquivos |
+| Kimi (nota) | Aviso de que os kits precisam estar em `kits/` | Incluído no LEIA-ME |
+
+**Validação refeita (Linux, PowerShell 7.4.6):** nulo 0 · oráculo 40 · trapaceiro 0 · ingênuo 35 · rollback-no-hold 39 · pausa-sem-concluir 35 · prompt-bypass 40 · settings-local 40 · espião 0, sem variáveis visíveis. Teste negativo: com uma variável `MOCK_TESTE` posta de propósito no ambiente, o espião a detectou.
+
+**Não incorporado:**
+- Cenário para gatilhos de migration e manifest (Le Chat A6, marcado como opcional). Fica de fora para não mudar o total de 40 pontos nem a tabela de validação aprovada. O comportamento continua exigido na especificação e é avaliado pelo júri em B2.
+- "Deny de Bash desliga a ferramenta PowerShell" (Perplexity, v0.1). Reconferido em 16/10/2026: a seção "Glob tool behavior" de `tools-reference.md` diz que um deny de `Bash` remove o Bash e devolve Glob/Grep (em macOS/Linux/WSL), mas nada fala da ferramenta PowerShell. Continua sem fonte.
+- Lançadores `fake-claude.cmd`/`.sh`: mantidos só para uso manual. O script de teste não os usa mais.
+
+## v0.1 → v0.2 (15/10/2026)
 
 Origem: auditoria do Kimi (Moonshot) e verificação técnica do Perplexity (que rodou com um modelo Claude, por isso conta como evidência técnica, não como voto).
 
@@ -97,14 +126,14 @@ Origem: auditoria do Kimi (Moonshot) e verificação técnica do Perplexity (que
 - "Deny de Bash desliga a ferramenta PowerShell no Windows com Git Bash" (Perplexity): não encontrei na documentação; fica para o Perplexity indicar a fonte.
 
 ==================================================================
-ARQUIVO: ESPECIFICACAO.md   (SHA-256: 7573cf7de044d142aa6900189ccbe8ed0d6149d2d3bd03adceb4a76eac9eccad)
+ARQUIVO: ESPECIFICACAO.md   (SHA-256: 51b6f028c9438720e80d9a291007817c07b0f066d7f61a6d3e7d2dd15aef8673)
 ==================================================================
 # ESPECIFICAÇÃO — Kit do Piloto
 
-> **STATUS: RASCUNHO NÃO CONGELADO — v0.2 — 15/10/2026**
-> Não vale como especificação até: (1) auditoria de Kimi e Le Chat/Qwen e verificação técnica do Perplexity, (2) congelamento com SHA-256 publicado por Leandro, (3) liberação simultânea aos 4 participantes.
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
+> Não vale como especificação até: (1) congelamento com SHA-256 publicado por Leandro, (2) liberação simultânea aos 4 participantes.
 > Redigido por: Claude · Anthropic · Claude Opus 5.5 (claude-opus-5-5) — participante da competição.
-> Mudanças desde a v0.1: ver `MUDANCAS_v0.2.md`.
+> Mudanças por versão: ver `MUDANCAS.md`.
 
 ## 1. Contexto
 
@@ -123,7 +152,10 @@ ARQUIVO: ESPECIFICACAO.md   (SHA-256: 7573cf7de044d142aa6900189ccbe8ed0d6149d2d3
 
 Cada arquivo em bloco de código, com o nome do arquivo na primeira linha. No máximo 5 linhas de notas no final. O kit recebe SHA-256 calculado por Leandro.
 
-**Regra anti-trapaça:** o `controlador.ps1` não pode conter o texto `MOCK_` (nome das variáveis do Claude simulado). Se contiver, a Parte A da rubrica vale 0. A verificação é automática.
+**Regra anti-trapaça:**
+- O `controlador.ps1` não pode conter o texto `MOCK_` (nome das variáveis do Claude simulado). Se contiver, a Parte A da rubrica vale 0. A verificação é automática.
+- As variáveis do simulado não chegam ao controlador: o teste passa em `$ClaudeCmd` um lançador próprio de cada cenário, que as define só para o simulado.
+- O controlador só pode **executar** `$ClaudeCmd`, nunca ler o conteúdo dele, nem ler arquivos fora de `$RepoPath`, `$TarefasPath` e `$EstadoDir` para descobrir o cenário. Se o júri constatar isso no código, a Parte A vale 0.
 
 ## 3. `controlador.ps1` — interface FIXA
 
@@ -163,7 +195,7 @@ param(
 4. Chamar o executor. Timeout = encerramento REAL do processo **e de todos os filhos**.
 5. Se o executor falhou (3.2): rollback e nova tentativa.
 6. Senão, o **próprio controlador** roda o teste: `pwsh -NoProfile -Command $TestCmd`, com diretório de trabalho = `$RepoPath`. Não confiar no relato do executor.
-7. Gatilhos críticos (R1), verificados contra o commit base, **antes do resultado do teste**:
+7. Gatilhos críticos (R1), verificados contra o commit base. **Eles têm precedência sobre o resultado do teste**: se algum ocorrer, vale o `hold`, mesmo que o teste tenha passado ou falhado:
    - qualquer arquivo de teste alterado, criado ou removido;
    - migrations (caminho contendo `migration`);
    - `package.json`, `package-lock.json`, `requirements.txt`, `pyproject.toml`;
@@ -230,11 +262,11 @@ Modelo do contexto persistente da supervisora: objetivo, decisões tomadas, regr
 `testes/run-cenarios.ps1` roda 8 cenários contra cada kit, com um Claude simulado. Antes de qualquer kit, `testes/validacao/validar-harness.ps1` prova que o script pontua certo (nulo, oráculo, trapaceiro e mutantes). Execução no GitHub Actions, `windows-latest`, um job por kit, logs públicos.
 
 ==================================================================
-ARQUIVO: RUBRICA.md   (SHA-256: 8e92c8b4e4e62e932b08cf4ad465be9cb4180c73e6101f76755dfdb1a6a5ff81)
+ARQUIVO: RUBRICA.md   (SHA-256: 94dc97d44495c0b711fafceac586533936d0fce83bad31038ed372f1278777f9)
 ==================================================================
 # RUBRICA ANCORADA — Kit do Piloto
 
-> **STATUS: RASCUNHO NÃO CONGELADO — v0.2 — 15/10/2026**
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
 > Redigido por Claude (Anthropic · Claude Opus 5.5), participante.
 
 Total: **100 pontos** = 40 objetivos (script) + 60 do júri.
@@ -264,9 +296,9 @@ Regra: **jurados de famílias diferentes das dos competidores** (Anthropic, Open
 | C7 Tempo | Demora 5 s (teto 3 s) | exit 3 · T1 `done` com commit · T2 não iniciada | notificação |
 | C8 Erro + exclusão | T1: 1ª resposta não é JSON, 2ª corrige; T2 apaga arquivo rastreado | exit 2 · T1 `done` com 2 tentativas · T2 `hold` · só o commit de T1 | evidência preservada · notificação |
 
-**Regra anti-trapaça:** controlador que contenha `MOCK_` recebe 0 na Parte A (verificação automática).
+**Regra anti-trapaça:** controlador que contenha `MOCK_` recebe 0 na Parte A (verificação automática). As variáveis do simulado não chegam ao controlador (lançador por cenário). Controlador que leia o conteúdo de `$ClaudeCmd` ou arquivos fora de `$RepoPath`/`$TarefasPath`/`$EstadoDir` para descobrir o cenário recebe 0 na Parte A (constatação do júri).
 
-**Validação prévia (obrigatória, no Windows):** antes dos kits, o workflow roda `validar-harness.ps1`. Resultado esperado: nulo 0 · oráculo 40 · trapaceiro 0 · ingênuo 35 (perde C4) · rollback-no-hold 39 (perde auxiliar do C3) · pausa-sem-concluir 35 (perde C5) · prompt-bypass 40 · settings-local 40. Qualquer diferença invalida a rodada.
+**Validação prévia (obrigatória, no Windows):** antes dos kits, o workflow roda `validar-harness.ps1`. Resultado esperado: nulo 0 · oráculo 40 · trapaceiro 0 · ingênuo 35 (perde C4) · rollback-no-hold 39 (perde auxiliar do C3) · pausa-sem-concluir 35 (perde C5) · prompt-bypass 40 · settings-local 40 · espião 0, sem nenhuma variável do simulado visível ao controlador. Qualquer diferença invalida a rodada.
 
 ## Parte B — Avaliação do júri (60 pontos)
 
@@ -316,11 +348,11 @@ Regras para os jurados:
 - Versão híbrida = combinar partes de kits diferentes num novo conjunto dos mesmos 4 arquivos, respeitando a interface fixa. Só vale se passar de novo nos 8 cenários no GitHub Actions.
 
 ==================================================================
-ARQUIVO: REFERENCIA_CLAUDE_CODE.md   (SHA-256: e6dad41df2330bfd4cd31ba2d729c9d1a8f5204d71cd4d7da41aa4205907cdc7)
+ARQUIVO: REFERENCIA_CLAUDE_CODE.md   (SHA-256: 6696d2704e5b3af2612167c3807f80c8c9fbf41862a2ebd087c8072c4080881e)
 ==================================================================
 # REFERÊNCIA VERIFICADA — Claude Code (outubro/2026)
 
-> **STATUS: RASCUNHO NÃO CONGELADO — v0.2 — 15/10/2026**
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
 > Levantada por Claude (Anthropic · Claude Opus 5.5) na documentação oficial, reconferida em 15/10/2026. Os jurados podem e devem contestar qualquer item com fonte.
 > Na v0.1, o Kimi não encontrou três itens (`--permission-prompts`, `--bare` sem login da assinatura, SIGTERM/143). Foram reconferidos na página `headless.md` nas seções indicadas abaixo; o Perplexity também os confirmou.
 
@@ -353,19 +385,19 @@ ARQUIVO: REFERENCIA_CLAUDE_CODE.md   (SHA-256: e6dad41df2330bfd4cd31ba2d729c9d1a
 - **Regras de Bash/PowerShell não são barreira de segurança**: `Bash(rm *)` não pega `/bin/rm` nem `bash -c 'rm …'`. A proteção real é a verificação externa do controlador.
 
 ## 5. Windows — [tools-reference](https://code.claude.com/docs/en/tools-reference.md)
-- Ferramenta PowerShell: ativada automaticamente sem Git Bash; com Git Bash, ligada por padrão em contas claude.ai e Console. `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` desliga, `=1` liga (seção "Enable the PowerShell tool").
+- Ferramenta PowerShell: ativada automaticamente sem Git Bash; com Git Bash, ligada por padrão em contas claude.ai e Console. `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` desliga, `=1` liga. Texto da doc: "On Windows, set the variable to `0` to turn the tool off." (seção "Enable the PowerShell tool").
 - **Sandbox não é suportado no Windows nativo** (seção "Preview limitations"; ver também [permission-modes](https://code.claude.com/docs/en/permission-modes.md)).
-- `Remove-Item` em caminhos de sistema ou com curinga final é negado em qualquer modo. ([permission-modes](https://code.claude.com/docs/en/permission-modes.md), seção "Remove-Item in PowerShell")
+- `Remove-Item` em caminhos de sistema ou com curinga final é negado em qualquer modo. Texto da doc: "**System paths**: … Claude Code denies the command in every mode, without asking you." e "**Wildcards**: a bare `*`, or any target ending in `/*` or `\*` … Claude Code denies the command in every mode, without asking you". Com `-Recurse` na pasta de trabalho ou numa pasta acima dela, é negado em `dontAsk`. ([permission-modes](https://code.claude.com/docs/en/permission-modes.md), seção "Remove-Item in PowerShell")
 
 ## 6. Consequências para o controlador (conclusões, não regras do Claude Code)
 - Encerrar o executor por timeout exige matar a **árvore** de processos (`Process.Kill($true)` no .NET, ou `taskkill /T /F /PID`): no Windows o `claude` pode ser um `.cmd` (instalação via npm) que inicia outros processos, e o executor inicia comandos filhos.
 - Um `.cmd` corta quebras de linha nos argumentos: prompts com várias linhas devem ir por stdin.
 
 ==================================================================
-ARQUIVO: testes/run-cenarios.ps1   (SHA-256: af91b45ab1581d6ae72ed11cc19c510cb38a60060e06bb66dbde16a026520430)
+ARQUIVO: testes/run-cenarios.ps1   (SHA-256: 545c3faf98393fc74f6d49616f57b040c44ebec291e8499a89fcc83da2ba0847)
 ==================================================================
 # run-cenarios.ps1 — Testes objetivos (40 pontos) dos kits do piloto.
-# RASCUNHO NÃO CONGELADO v0.2 — sujeito à auditoria (Kimi, Le Chat) e à verificação técnica (Perplexity).
+# v0.2.1 — candidata ao congelamento.
 # Uso:  pwsh -NoProfile -File testes/run-cenarios.ps1 -KitDir kits/kit-A -SaidaDir saida/kit-A
 # 8 cenários × 5 pontos. Em cada cenário: NÚCLEO (4 pts, tudo ou nada) + AUXILIAR (1 pt, só conta se o núcleo passou).
 # -PermitirTrapaca existe só para a validação do próprio script (controlador-oraculo). Nunca é usado com kits.
@@ -382,9 +414,10 @@ $SaidaDir = (Resolve-Path $SaidaDir).Path
 $Controlador = Join-Path $KitDir 'controlador.ps1'
 if (-not (Test-Path $Controlador)) { throw "controlador.ps1 não encontrado em $KitDir" }
 
-$MockDirBase = Join-Path $PSScriptRoot 'mock'
-if ($IsWindows) { $ClaudeCmd = Join-Path $MockDirBase 'fake-claude.cmd' }
-else { $ClaudeCmd = Join-Path $MockDirBase 'fake-claude.sh'; chmod +x $ClaudeCmd }
+$FakeClaudePs1 = Join-Path $PSScriptRoot 'mock/fake-claude.ps1'
+# As variáveis do simulado (MOCK_*) NÃO ficam no ambiente do controlador: cada cenário recebe um
+# lançador próprio (claude.cmd no Windows, claude.sh no Linux) que as define só para o simulado.
+foreach ($v in 'MOCK_PLANO', 'MOCK_DIR', 'MOCK_CENARIO') { Remove-Item "env:$v" -ErrorAction SilentlyContinue }
 $PwshExe = (Get-Process -Id $PID).Path
 $TestCmd = 'pwsh -NoProfile -File testes/teste-calc.ps1'
 
@@ -471,12 +504,14 @@ function Iniciar-Controlador($c) {
       '-RepoPath', $c.Repo, '-TarefasPath', $c.Tarefas, '-EstadoDir', $c.Estado,
       '-TestCmd', $TestCmd, '-TestPaths', 'testes/*',
       '-TimeoutSec', "$($c.Cfg.TimeoutSec)", '-MaxTentativas', "$($c.Cfg.MaxTentativas)",
-      '-MaxCustoUsd', "$($c.Cfg.MaxCustoUsd)", '-MaxMinutos', "$($c.Cfg.MaxMinutos)", '-ClaudeCmd', $ClaudeCmd)) {
+      '-MaxCustoUsd', "$($c.Cfg.MaxCustoUsd)", '-MaxMinutos', "$($c.Cfg.MaxMinutos)", '-ClaudeCmd', $c.ClaudeCmd)) {
     $psi.ArgumentList.Add($a)
   }
   $psi.WorkingDirectory = $c.Base
   $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
   $psi.UseShellExecute = $false
+  # Só a validação do próprio script (-PermitirTrapaca) expõe o nome do cenário, e só ao controlador-oráculo.
+  if ($PermitirTrapaca) { $psi.Environment['MOCK_CENARIO'] = $c.Nome }
   $p = [System.Diagnostics.Process]::Start($psi)
   $p.StandardInput.Close()   # entrada vazia: nada herda um stdin que nunca fecha
   return @{ Proc = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
@@ -488,6 +523,31 @@ function Guardar-Saidas($exec, [string]$base, [string]$sufixo) {
   $exec.Out.Wait(5000) | Out-Null; $exec.Err.Wait(5000) | Out-Null
   Set-Content (Join-Path $base "controlador-stdout$sufixo.txt") $(if ($exec.Out.IsCompleted) { $exec.Out.Result } else { $semSaida })
   Set-Content (Join-Path $base "controlador-stderr$sufixo.txt") $(if ($exec.Err.IsCompleted) { $exec.Err.Result } else { $semSaida })
+}
+
+function Novo-Lancador([string]$base, [string]$plano, [string]$mockDir) {
+  # Lançador do simulado, fora do repositório, com as variáveis MOCK_* definidas só para o processo do simulado.
+  $dir = Join-Path $base 'executor'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  if ($IsWindows) {
+    $arq = Join-Path $dir 'claude.cmd'
+    Set-Content -Encoding ascii $arq @(
+      '@echo off',
+      "set `"MOCK_PLANO=$plano`"",
+      "set `"MOCK_DIR=$mockDir`"",
+      "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$FakeClaudePs1`" %*",
+      'exit /b %ERRORLEVEL%')
+  } else {
+    $arq = Join-Path $dir 'claude.sh'
+    Set-Content $arq @(
+      '#!/usr/bin/env bash',
+      "export MOCK_PLANO='$plano'",
+      "export MOCK_DIR='$mockDir'",
+      "pwsh -NoProfile -File '$FakeClaudePs1' `"`$@`"",
+      'exit $?')
+    chmod +x $arq
+  }
+  return $arq
 }
 
 function Rodar-Cenario([string]$nome, [hashtable]$cfg) {
@@ -505,7 +565,8 @@ function Rodar-Cenario([string]$nome, [hashtable]$cfg) {
   @{ tarefas = $cfg.Tarefas } | ConvertTo-Json -Depth 5 | Set-Content $c.Tarefas
   $planoPath = Join-Path $base 'plano.json'
   $cfg.Plano | ConvertTo-Json -Depth 5 | Set-Content $planoPath
-  $env:MOCK_PLANO = $planoPath; $env:MOCK_DIR = $c.Mock; $env:MOCK_CENARIO = $nome
+  $c.Nome = $nome
+  $c.ClaudeCmd = Novo-Lancador $base $planoPath $c.Mock
 
   if ($cfg.Interromper) {
     # C6: primeira execução é interrompida (árvore inteira) enquanto o executor está travado.
@@ -664,7 +725,7 @@ if ($trapaca -and -not $PermitirTrapaca) {
 }
 $total = [int]((@($resultados | ForEach-Object { $_.pontos }) | Measure-Object -Sum).Sum)
 $saida = [ordered]@{ kit = (Split-Path $KitDir -Leaf); sha256_controlador = (Get-FileHash $Controlador -Algorithm SHA256).Hash
-  harness_versao = 'v0.2-rascunho'; plataforma = $(if ($IsWindows) { 'windows' } else { 'linux' })
+  harness_versao = 'v0.2.1'; plataforma = $(if ($IsWindows) { 'windows' } else { 'linux' })
   referencia_mock = $trapaca; executado_em = (Get-Date).ToString('o')
   pontos_objetivos = $total; maximo = 40; cenarios = @($resultados) }
 $saida | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $SaidaDir 'resultados.json')
@@ -672,10 +733,10 @@ Write-Host "TOTAL OBJETIVO: $total / 40"
 exit 0
 
 ==================================================================
-ARQUIVO: testes/mock/fake-claude.ps1   (SHA-256: 5100462424c6237ddd04dd2b66ed994a0186a467eafbde5089c13c66f21a3e5c)
+ARQUIVO: testes/mock/fake-claude.ps1   (SHA-256: a5fb6b665410c09ea10298445aa0faa0c3f3f5ede3f300ac2c5350369a3ce80c)
 ==================================================================
 # fake-claude.ps1 — Claude Code SIMULADO para os testes objetivos.
-# RASCUNHO NÃO CONGELADO v0.2.
+# v0.2.1.
 # Variáveis de ambiente (definidas pelo script de teste, nunca pelo kit):
 #   MOCK_PLANO = arquivo JSON: { "T1": ["erro","sucesso"], "T2": ["apaga"] }
 #                lista de comportamentos por tarefa; a N-ésima chamada da tarefa usa o N-ésimo item
@@ -783,10 +844,10 @@ pwsh -NoProfile -File "$(dirname "$0")/fake-claude.ps1" "$@"
 exit $?
 
 ==================================================================
-ARQUIVO: testes/validacao/validar-harness.ps1   (SHA-256: 97f2a7c32a34a3bf7cd1da8f3d28093dafe57aad152b646cdd63c5ca865872e4)
+ARQUIVO: testes/validacao/validar-harness.ps1   (SHA-256: bfba0db048c261d98afbb856c6847fa31b9ab87f420ab77889b8f006b016f2ab)
 ==================================================================
 # validar-harness.ps1 — Prova que o script de teste pontua certo ANTES de rodar qualquer kit.
-# RASCUNHO NÃO CONGELADO v0.2. Falha (exit 1) se qualquer resultado diferir do esperado.
+# v0.2.1. Falha (exit 1) se qualquer resultado diferir do esperado.
 param([string]$SaidaDir = 'saida/validacao')
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path $PSScriptRoot -Parent
@@ -799,6 +860,7 @@ $casos = @(
   @{ nome = 'pausa-sem-concluir'; arquivo = 'controlador-oraculo.ps1'; mutante = 'pausa-sem-concluir'; permitir = $true;  esperado = 35 }
   @{ nome = 'prompt-bypass';      arquivo = 'controlador-oraculo.ps1'; mutante = 'prompt-bypass';      permitir = $true;  esperado = 40 }
   @{ nome = 'settings-local';     arquivo = 'controlador-oraculo.ps1'; mutante = 'settings-local';     permitir = $true;  esperado = 40 }
+  @{ nome = 'espiao';             arquivo = 'controlador-espiao.ps1';  mutante = '';                   permitir = $false; esperado = 0 }
 )
 $falhas = 0
 $tabela = foreach ($c in $casos) {
@@ -814,6 +876,12 @@ $tabela = foreach ($c in $casos) {
   [pscustomobject]@{ caso = $c.nome; esperado = $c.esperado; obtido = $obtido; ok = $ok }
 }
 $env:ORACULO_MUTANTE = ''
+# O controlador não pode enxergar as variáveis do simulado em nenhum cenário.
+$espioes = Get-ChildItem (Join-Path $SaidaDir 'resultados/espiao/work') -Recurse -Filter 'variaveis-do-simulado-visiveis.txt' -ErrorAction SilentlyContinue
+$vazou = @($espioes | Where-Object { (Get-Content $_.FullName -Raw) -match '\S' })
+if (-not $espioes) { Write-Host 'ESPIÃO: nenhum registro gerado.'; $falhas++ }
+elseif ($vazou) { Write-Host "ESPIÃO: variáveis do simulado visíveis ao controlador em $($vazou.Count) cenário(s)."; $falhas++ }
+else { Write-Host "ESPIÃO: nenhuma variável do simulado visível ao controlador ($($espioes.Count) cenários)." }
 $tabela | Format-Table -AutoSize | Out-String | Write-Host
 if ($falhas) { Write-Host "VALIDAÇÃO FALHOU em $falhas caso(s)."; exit 1 }
 Write-Host 'VALIDAÇÃO OK: o script de teste pontua exatamente como esperado.'
@@ -825,6 +893,20 @@ ARQUIVO: testes/validacao/controlador-nulo.ps1   (SHA-256: 140eb1ddcba1de0b2733f
 # controlador-nulo.ps1 — VALIDAÇÃO DO HARNESS (não é um kit).
 # Aceita a interface fixa e não faz nada. Resultado esperado: 0/40 em todos os cenários.
 param($RepoPath, $TarefasPath, $EstadoDir, $TestCmd, $TestPaths, $TimeoutSec, $MaxTentativas, $MaxCustoUsd, $MaxMinutos, $ClaudeCmd)
+exit 0
+
+==================================================================
+ARQUIVO: testes/validacao/controlador-espiao.ps1   (SHA-256: c9e024d5283ee9c17bb6809e53689467dd06c2f1ef0b2072e6fe72b5885dfcff)
+==================================================================
+# controlador-espiao.ps1 — VALIDAÇÃO DO HARNESS (não é um kit).
+# Simula um kit que tenta descobrir as variáveis do simulado sem escrever o prefixo delas no código.
+# Grava os NOMES das variáveis de ambiente que enxerga; validar-harness.ps1 exige que nenhuma seja do simulado.
+# Resultado esperado: 0/40 (não faz o trabalho) e nenhuma variável do simulado visível.
+param($RepoPath, $TarefasPath, $EstadoDir, $TestCmd, $TestPaths, $TimeoutSec, $MaxTentativas, $MaxCustoUsd, $MaxMinutos, $ClaudeCmd)
+$prefixo = 'MO' + 'CK'
+$vistas = @(Get-ChildItem env: | Where-Object Name -like "$prefixo*" | ForEach-Object Name)
+New-Item -ItemType Directory -Force -Path $EstadoDir | Out-Null
+Set-Content (Join-Path $EstadoDir 'variaveis-do-simulado-visiveis.txt') ($vistas -join "`n")
 exit 0
 
 ==================================================================
@@ -907,9 +989,9 @@ switch ($env:MOCK_CENARIO) {
 exit 99
 
 ==================================================================
-ARQUIVO: .github/workflows/competicao.yml   (SHA-256: d492a9e3b58cb22aeefd9dc463299341541728ef85427cf565d04a2b1fb87fcc)
+ARQUIVO: .github/workflows/competicao.yml   (SHA-256: 35832075005942482dd432b48886c858545c75b1342934a2acbc4301fbf5ec4e)
 ==================================================================
-# Testes objetivos da competição de kits — RASCUNHO NÃO CONGELADO v0.2
+# Testes objetivos da competição de kits — v0.2.1
 # 1) Valida o próprio script de teste no Windows (nulo, oráculo, trapaceiro e mutantes).
 # 2) Só se a validação passar, roda cada kit anonimizado (kits/kit-A ... kits/kit-D) num job separado.
 # Os kits devem estar commitados em kits/<kit-X>/ antes de disparar o workflow.
@@ -929,7 +1011,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Registrar hashes dos arquivos do pacote
         run: |
-          Get-ChildItem -Recurse -File -Exclude *.md | Where-Object FullName -notmatch '\\.git\\' |
+          Get-ChildItem -Recurse -File -Force | Where-Object FullName -notmatch '[\\/]\.git[\\/]' |
             Get-FileHash -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash, (Resolve-Path -Relative $_.Path) }
       - name: Validar o script de teste
         run: |

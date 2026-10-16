@@ -1,4 +1,4 @@
-# Testes objetivos da competição de kits — RASCUNHO NÃO CONGELADO v0.2
+# Testes objetivos da competição de kits — v0.2.1
 # 1) Valida o próprio script de teste no Windows (nulo, oráculo, trapaceiro e mutantes).
 # 2) Só se a validação passar, roda cada kit anonimizado (kits/kit-A ... kits/kit-D) num job separado.
 # Os kits devem estar commitados em kits/<kit-X>/ antes de disparar o workflow.
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Registrar hashes dos arquivos do pacote
         run: |
-          Get-ChildItem -Recurse -File -Exclude *.md | Where-Object FullName -notmatch '\\.git\\' |
+          Get-ChildItem -Recurse -File -Force | Where-Object FullName -notmatch '[\\/]\.git[\\/]' |
             Get-FileHash -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash, (Resolve-Path -Relative $_.Path) }
       - name: Validar o script de teste
         run: |

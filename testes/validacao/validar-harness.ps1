@@ -1,5 +1,5 @@
 # validar-harness.ps1 — Prova que o script de teste pontua certo ANTES de rodar qualquer kit.
-# RASCUNHO NÃO CONGELADO v0.2. Falha (exit 1) se qualquer resultado diferir do esperado.
+# v0.2.1. Falha (exit 1) se qualquer resultado diferir do esperado.
 param([string]$SaidaDir = 'saida/validacao')
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path $PSScriptRoot -Parent
@@ -12,6 +12,7 @@ $casos = @(
   @{ nome = 'pausa-sem-concluir'; arquivo = 'controlador-oraculo.ps1'; mutante = 'pausa-sem-concluir'; permitir = $true;  esperado = 35 }
   @{ nome = 'prompt-bypass';      arquivo = 'controlador-oraculo.ps1'; mutante = 'prompt-bypass';      permitir = $true;  esperado = 40 }
   @{ nome = 'settings-local';     arquivo = 'controlador-oraculo.ps1'; mutante = 'settings-local';     permitir = $true;  esperado = 40 }
+  @{ nome = 'espiao';             arquivo = 'controlador-espiao.ps1';  mutante = '';                   permitir = $false; esperado = 0 }
 )
 $falhas = 0
 $tabela = foreach ($c in $casos) {
@@ -27,6 +28,12 @@ $tabela = foreach ($c in $casos) {
   [pscustomobject]@{ caso = $c.nome; esperado = $c.esperado; obtido = $obtido; ok = $ok }
 }
 $env:ORACULO_MUTANTE = ''
+# O controlador não pode enxergar as variáveis do simulado em nenhum cenário.
+$espioes = Get-ChildItem (Join-Path $SaidaDir 'resultados/espiao/work') -Recurse -Filter 'variaveis-do-simulado-visiveis.txt' -ErrorAction SilentlyContinue
+$vazou = @($espioes | Where-Object { (Get-Content $_.FullName -Raw) -match '\S' })
+if (-not $espioes) { Write-Host 'ESPIÃO: nenhum registro gerado.'; $falhas++ }
+elseif ($vazou) { Write-Host "ESPIÃO: variáveis do simulado visíveis ao controlador em $($vazou.Count) cenário(s)."; $falhas++ }
+else { Write-Host "ESPIÃO: nenhuma variável do simulado visível ao controlador ($($espioes.Count) cenários)." }
 $tabela | Format-Table -AutoSize | Out-String | Write-Host
 if ($falhas) { Write-Host "VALIDAÇÃO FALHOU em $falhas caso(s)."; exit 1 }
 Write-Host 'VALIDAÇÃO OK: o script de teste pontua exatamente como esperado.'

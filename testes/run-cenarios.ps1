@@ -1,5 +1,5 @@
 # run-cenarios.ps1 — Testes objetivos (40 pontos) dos kits do piloto.
-# RASCUNHO NÃO CONGELADO v0.2 — sujeito à auditoria (Kimi, Le Chat) e à verificação técnica (Perplexity).
+# v0.2.1 — candidata ao congelamento.
 # Uso:  pwsh -NoProfile -File testes/run-cenarios.ps1 -KitDir kits/kit-A -SaidaDir saida/kit-A
 # 8 cenários × 5 pontos. Em cada cenário: NÚCLEO (4 pts, tudo ou nada) + AUXILIAR (1 pt, só conta se o núcleo passou).
 # -PermitirTrapaca existe só para a validação do próprio script (controlador-oraculo). Nunca é usado com kits.
@@ -16,9 +16,10 @@ $SaidaDir = (Resolve-Path $SaidaDir).Path
 $Controlador = Join-Path $KitDir 'controlador.ps1'
 if (-not (Test-Path $Controlador)) { throw "controlador.ps1 não encontrado em $KitDir" }
 
-$MockDirBase = Join-Path $PSScriptRoot 'mock'
-if ($IsWindows) { $ClaudeCmd = Join-Path $MockDirBase 'fake-claude.cmd' }
-else { $ClaudeCmd = Join-Path $MockDirBase 'fake-claude.sh'; chmod +x $ClaudeCmd }
+$FakeClaudePs1 = Join-Path $PSScriptRoot 'mock/fake-claude.ps1'
+# As variáveis do simulado (MOCK_*) NÃO ficam no ambiente do controlador: cada cenário recebe um
+# lançador próprio (claude.cmd no Windows, claude.sh no Linux) que as define só para o simulado.
+foreach ($v in 'MOCK_PLANO', 'MOCK_DIR', 'MOCK_CENARIO') { Remove-Item "env:$v" -ErrorAction SilentlyContinue }
 $PwshExe = (Get-Process -Id $PID).Path
 $TestCmd = 'pwsh -NoProfile -File testes/teste-calc.ps1'
 
@@ -105,12 +106,14 @@ function Iniciar-Controlador($c) {
       '-RepoPath', $c.Repo, '-TarefasPath', $c.Tarefas, '-EstadoDir', $c.Estado,
       '-TestCmd', $TestCmd, '-TestPaths', 'testes/*',
       '-TimeoutSec', "$($c.Cfg.TimeoutSec)", '-MaxTentativas', "$($c.Cfg.MaxTentativas)",
-      '-MaxCustoUsd', "$($c.Cfg.MaxCustoUsd)", '-MaxMinutos', "$($c.Cfg.MaxMinutos)", '-ClaudeCmd', $ClaudeCmd)) {
+      '-MaxCustoUsd', "$($c.Cfg.MaxCustoUsd)", '-MaxMinutos', "$($c.Cfg.MaxMinutos)", '-ClaudeCmd', $c.ClaudeCmd)) {
     $psi.ArgumentList.Add($a)
   }
   $psi.WorkingDirectory = $c.Base
   $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
   $psi.UseShellExecute = $false
+  # Só a validação do próprio script (-PermitirTrapaca) expõe o nome do cenário, e só ao controlador-oráculo.
+  if ($PermitirTrapaca) { $psi.Environment['MOCK_CENARIO'] = $c.Nome }
   $p = [System.Diagnostics.Process]::Start($psi)
   $p.StandardInput.Close()   # entrada vazia: nada herda um stdin que nunca fecha
   return @{ Proc = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
@@ -122,6 +125,31 @@ function Guardar-Saidas($exec, [string]$base, [string]$sufixo) {
   $exec.Out.Wait(5000) | Out-Null; $exec.Err.Wait(5000) | Out-Null
   Set-Content (Join-Path $base "controlador-stdout$sufixo.txt") $(if ($exec.Out.IsCompleted) { $exec.Out.Result } else { $semSaida })
   Set-Content (Join-Path $base "controlador-stderr$sufixo.txt") $(if ($exec.Err.IsCompleted) { $exec.Err.Result } else { $semSaida })
+}
+
+function Novo-Lancador([string]$base, [string]$plano, [string]$mockDir) {
+  # Lançador do simulado, fora do repositório, com as variáveis MOCK_* definidas só para o processo do simulado.
+  $dir = Join-Path $base 'executor'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  if ($IsWindows) {
+    $arq = Join-Path $dir 'claude.cmd'
+    Set-Content -Encoding ascii $arq @(
+      '@echo off',
+      "set `"MOCK_PLANO=$plano`"",
+      "set `"MOCK_DIR=$mockDir`"",
+      "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$FakeClaudePs1`" %*",
+      'exit /b %ERRORLEVEL%')
+  } else {
+    $arq = Join-Path $dir 'claude.sh'
+    Set-Content $arq @(
+      '#!/usr/bin/env bash',
+      "export MOCK_PLANO='$plano'",
+      "export MOCK_DIR='$mockDir'",
+      "pwsh -NoProfile -File '$FakeClaudePs1' `"`$@`"",
+      'exit $?')
+    chmod +x $arq
+  }
+  return $arq
 }
 
 function Rodar-Cenario([string]$nome, [hashtable]$cfg) {
@@ -139,7 +167,8 @@ function Rodar-Cenario([string]$nome, [hashtable]$cfg) {
   @{ tarefas = $cfg.Tarefas } | ConvertTo-Json -Depth 5 | Set-Content $c.Tarefas
   $planoPath = Join-Path $base 'plano.json'
   $cfg.Plano | ConvertTo-Json -Depth 5 | Set-Content $planoPath
-  $env:MOCK_PLANO = $planoPath; $env:MOCK_DIR = $c.Mock; $env:MOCK_CENARIO = $nome
+  $c.Nome = $nome
+  $c.ClaudeCmd = Novo-Lancador $base $planoPath $c.Mock
 
   if ($cfg.Interromper) {
     # C6: primeira execução é interrompida (árvore inteira) enquanto o executor está travado.
@@ -298,7 +327,7 @@ if ($trapaca -and -not $PermitirTrapaca) {
 }
 $total = [int]((@($resultados | ForEach-Object { $_.pontos }) | Measure-Object -Sum).Sum)
 $saida = [ordered]@{ kit = (Split-Path $KitDir -Leaf); sha256_controlador = (Get-FileHash $Controlador -Algorithm SHA256).Hash
-  harness_versao = 'v0.2-rascunho'; plataforma = $(if ($IsWindows) { 'windows' } else { 'linux' })
+  harness_versao = 'v0.2.1'; plataforma = $(if ($IsWindows) { 'windows' } else { 'linux' })
   referencia_mock = $trapaca; executado_em = (Get-Date).ToString('o')
   pontos_objetivos = $total; maximo = 40; cenarios = @($resultados) }
 $saida | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $SaidaDir 'resultados.json')

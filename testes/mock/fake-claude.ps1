@@ -1,5 +1,5 @@
 # fake-claude.ps1 — Claude Code SIMULADO para os testes objetivos.
-# RASCUNHO NÃO CONGELADO v0.2.
+# v0.2.1.
 # Variáveis de ambiente (definidas pelo script de teste, nunca pelo kit):
 #   MOCK_PLANO = arquivo JSON: { "T1": ["erro","sucesso"], "T2": ["apaga"] }
 #                lista de comportamentos por tarefa; a N-ésima chamada da tarefa usa o N-ésimo item
