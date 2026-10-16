@@ -1,6 +1,6 @@
 # REFERÊNCIA VERIFICADA — Claude Code (outubro/2026)
 
-> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.2 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão aplica os ajustes finais dos jurados e a correção do defeito A4 apontado pelo Perplexity)
 > Levantada por Claude (Anthropic · Claude Opus 5.5) na documentação oficial, reconferida em 15/10/2026. Os jurados podem e devem contestar qualquer item com fonte.
 > Na v0.1, o Kimi não encontrou três itens (`--permission-prompts`, `--bare` sem login da assinatura, SIGTERM/143). Foram reconferidos na página `headless.md` nas seções indicadas abaixo; o Perplexity também os confirmou.
 
@@ -35,6 +35,7 @@
 ## 5. Windows — [tools-reference](https://code.claude.com/docs/en/tools-reference.md)
 - Ferramenta PowerShell: ativada automaticamente sem Git Bash; com Git Bash, ligada por padrão em contas claude.ai e Console. `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` desliga, `=1` liga. Texto da doc: "On Windows, set the variable to `0` to turn the tool off." (seção "Enable the PowerShell tool").
 - **Sandbox não é suportado no Windows nativo** (seção "Preview limitations"; ver também [permission-modes](https://code.claude.com/docs/en/permission-modes.md)).
+- **Ponto em disputa, não confirmado:** o Perplexity afirma que a página tools-reference tem uma seção "Bash deny rules also turn off the PowerShell tool", segundo a qual, no Windows com Git Bash, até um deny com escopo (ex.: `Bash(git push *)`) desliga a ferramenta PowerShell. Em 16/10/2026, a página entregue ao Claude não tinha essa seção (as seções da ferramenta PowerShell eram "Enable the PowerShell tool", "Shell selection…", "Windows encoding and exit codes" e "Preview limitations"). Consequência neutra para todos: os jurados **não** penalizam denies de shell escritos como `Bash(...)` nem como `PowerShell(...)`, e o piloto deve conferir com `/permissions` qual ferramenta de shell ficou ativa.
 - `Remove-Item` em caminhos de sistema ou com curinga final é negado em qualquer modo. Texto da doc: "**System paths**: … Claude Code denies the command in every mode, without asking you." e "**Wildcards**: a bare `*`, or any target ending in `/*` or `\*` … Claude Code denies the command in every mode, without asking you". Com `-Recurse` na pasta de trabalho ou numa pasta acima dela, é negado em `dontAsk`. ([permission-modes](https://code.claude.com/docs/en/permission-modes.md), seção "Remove-Item in PowerShell")
 
 ## 6. Consequências para o controlador (conclusões, não regras do Claude Code)

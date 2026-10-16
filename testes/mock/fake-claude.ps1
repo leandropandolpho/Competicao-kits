@@ -1,5 +1,5 @@
 # fake-claude.ps1 — Claude Code SIMULADO para os testes objetivos.
-# v0.2.1.
+# v0.2.2.
 # Variáveis de ambiente (definidas pelo script de teste, nunca pelo kit):
 #   MOCK_PLANO = arquivo JSON: { "T1": ["erro","sucesso"], "T2": ["apaga"] }
 #                lista de comportamentos por tarefa; a N-ésima chamada da tarefa usa o N-ésimo item
@@ -77,8 +77,13 @@ switch ($comportamento) {
     Start-Sleep -Seconds 600
     Saida 'nunca deveria chegar aqui' 0.02
   }
+  'complemento' {
+    # Muda outro arquivo (a Soma já foi corrigida por uma tarefa anterior); o teste continua passando.
+    Set-Content -Path (Join-Path (Get-Location) 'src/notas.ps1') -Value "# nota da chamada $n"
+    Saida 'Acrescentei as notas.' 0.02
+  }
   'custo' { Set-Content -Path $calc -Value $certo; Saida 'Corrigi a função Soma (execução cara).' 6.0 }
-  'lento' { Start-Sleep -Seconds 5; Set-Content -Path $calc -Value $certo; Saida 'Corrigi devagar.' 0.02 }
+  'lento' { Start-Sleep -Seconds 10; Set-Content -Path $calc -Value $certo; Saida 'Corrigi devagar.' 0.02 }
   'erro'  { Write-Output 'Erro interno: isto não é JSON'; exit 1 }
   'apaga' {
     Remove-Item -Path (Join-Path (Get-Location) 'src/extra.ps1') -Force

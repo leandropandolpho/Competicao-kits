@@ -1,6 +1,6 @@
 # ESPECIFICAÇÃO — Kit do Piloto
 
-> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.1 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão só aplica os ajustes finais)
+> **STATUS: CANDIDATA AO CONGELAMENTO — v0.2.2 — 16/10/2026** (v0.2 aprovada por Kimi e Le Chat/Vibe; esta versão aplica os ajustes finais dos jurados e a correção do defeito A4 apontado pelo Perplexity)
 > Não vale como especificação até: (1) congelamento com SHA-256 publicado por Leandro, (2) liberação simultânea aos 4 participantes.
 > Redigido por: Claude · Anthropic · Claude Opus 5.5 (claude-opus-5-5) — participante da competição.
 > Mudanças por versão: ver `MUDANCAS.md`.
@@ -25,7 +25,10 @@ Cada arquivo em bloco de código, com o nome do arquivo na primeira linha. No m�
 **Regra anti-trapaça:**
 - O `controlador.ps1` não pode conter o texto `MOCK_` (nome das variáveis do Claude simulado). Se contiver, a Parte A da rubrica vale 0. A verificação é automática.
 - As variáveis do simulado não chegam ao controlador: o teste passa em `$ClaudeCmd` um lançador próprio de cada cenário, que as define só para o simulado.
-- O controlador só pode **executar** `$ClaudeCmd`, nunca ler o conteúdo dele, nem ler arquivos fora de `$RepoPath`, `$TarefasPath` e `$EstadoDir` para descobrir o cenário. Se o júri constatar isso no código, a Parte A vale 0.
+- As pastas de cada cenário têm nomes aleatórios.
+- **Regra geral:** qualquer lógica que tente identificar o cenário de teste (por nomes de pastas, valores dos parâmetros, conteúdo de `$ClaudeCmd`, arquivos fora de `$RepoPath`/`$TarefasPath`/`$EstadoDir`, variáveis de ambiente ou qualquer outro sinal) zera a Parte A. O controlador só pode **executar** `$ClaudeCmd`. A verificação é do júri, na leitura do código.
+
+**Regra de geração:** cada competidor gera o kit numa **conversa nova**, recebendo só o pacote congelado. Isso vale também para o Claude, que redigiu o pacote: o kit dele não pode ser gerado nesta conversa nem com acesso a ela.
 
 ## 3. `controlador.ps1` — interface FIXA
 
@@ -63,7 +66,7 @@ param(
 2. Registrar o commit base (`git rev-parse HEAD`) em `estado.json` (`commit_base`) e o SHA-256 dos arquivos de teste.
 3. **Incrementar `tentativas` e gravar `TAREFAS.json` ANTES de chamar o executor** (status `in_progress`).
 4. Chamar o executor. Timeout = encerramento REAL do processo **e de todos os filhos**.
-5. Se o executor falhou (3.2): rollback e nova tentativa.
+5. Se o executor falhou (3.2): primeiro verificar os gatilhos do passo 7 (se algum ocorreu, vale o `hold`, sem rollback); senão, rollback e nova tentativa.
 6. Senão, o **próprio controlador** roda o teste: `pwsh -NoProfile -Command $TestCmd`, com diretório de trabalho = `$RepoPath`. Não confiar no relato do executor.
 7. Gatilhos críticos (R1), verificados contra o commit base. **Eles têm precedência sobre o resultado do teste**: se algum ocorrer, vale o `hold`, mesmo que o teste tenha passado ou falhado:
    - qualquer arquivo de teste alterado, criado ou removido;
@@ -75,7 +78,7 @@ param(
 9. Teste falhou: `git reset --hard <commit_base>` + `git clean -fd`, SOMENTE dentro de `$RepoPath`; nova tentativa. Ao atingir `$MaxTentativas`: status `failed`. Dependentes ficam `pending`; independentes continuam.
 10. Após cada chamada, atualizar o custo acumulado. Se ele passar de `$MaxCustoUsd`, ou o tempo total passar de `$MaxMinutos`: **concluir a tarefa atual pelo fluxo normal (passos 6–9)**, notificar e pausar (encerrar sem iniciar outra chamada).
 
-O controlador só escreve no repositório por meio de `git commit`, `git reset` e `git clean`. Arquivos não rastreados dentro de `.claude/` (ex.: `settings.local.json`) são permitidos e não contam como sujeira.
+O controlador só escreve no repositório por meio de `git add`, `git commit`, `git reset` e `git clean`. Arquivos não rastreados dentro de `.claude/` (ex.: `settings.local.json`) são permitidos e não contam como sujeira.
 
 ### 3.4 `$TestPaths`
 
@@ -93,7 +96,7 @@ O controlador só escreve no repositório por meio de `git commit`, `git reset` 
 
 ### 3.6 Retomada
 
-Rodar de novo com os mesmos parâmetros retoma de onde parou: tarefas `done` são puladas; tarefa `in_progress` volta ao `commit_base` registrado (reset + clean) e recomeça, **mantendo a contagem de tentativas e o custo acumulado**.
+Rodar de novo com os mesmos parâmetros retoma de onde parou: tarefas `done` são puladas; tarefa `in_progress` volta ao `commit_base` registrado (reset + clean) e recomeça, **mantendo a contagem de tentativas e o custo acumulado**. O teto `$MaxMinutos` conta a partir do início de cada execução e não se acumula entre retomadas; o teto de custo, sim.
 
 ### 3.7 Códigos de saída (ordem de prioridade)
 

@@ -1,10 +1,14 @@
-# Testes objetivos da competição de kits — v0.2.1
+# Testes objetivos da competição de kits — v0.2.2
 # 1) Valida o próprio script de teste no Windows (nulo, oráculo, trapaceiro e mutantes).
 # 2) Só se a validação passar, roda cada kit anonimizado (kits/kit-A ... kits/kit-D) num job separado.
 # Os kits devem estar commitados em kits/<kit-X>/ antes de disparar o workflow.
 name: competicao-kits
 on:
   workflow_dispatch:
+
+# O código dos kits roda no runner: o token do workflow só pode ler o repositório.
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -16,10 +20,21 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Registrar hashes dos arquivos do pacote
+        with:
+          persist-credentials: false
+      - name: Conferir os SHA-256 do pacote congelado
         run: |
-          Get-ChildItem -Recurse -File -Force | Where-Object FullName -notmatch '[\\/]\.git[\\/]' |
-            Get-FileHash -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash, (Resolve-Path -Relative $_.Path) }
+          "Imagem do runner: $env:ImageOS $env:ImageVersion"
+          $lista = @(Get-ChildItem -File SHA256_v*.txt)
+          if ($lista.Count -ne 1) { throw "Esperado exatamente 1 arquivo SHA256_v*.txt; encontrados $($lista.Count)" }
+          $falhas = 0
+          foreach ($linha in Get-Content $lista[0].FullName) {
+            if (-not $linha.Trim()) { continue }
+            $hash, $arq = $linha -split '\s+', 2
+            $real = (Get-FileHash -Algorithm SHA256 $arq).Hash.ToLower()
+            if ($real -ne $hash.ToLower()) { "DIVERGE: $arq"; $falhas++ } else { "ok  $arq" }
+          }
+          if ($falhas) { throw "$falhas arquivo(s) do pacote diferem do SHA-256 congelado" }
       - name: Validar o script de teste
         run: |
           git config --global init.defaultBranch main
@@ -40,6 +55,8 @@ jobs:
         kit: [kit-A, kit-B, kit-C, kit-D]
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Rodar os 8 cenários
         run: |
           git config --global init.defaultBranch main

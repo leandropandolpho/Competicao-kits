@@ -1,5 +1,5 @@
 # validar-harness.ps1 — Prova que o script de teste pontua certo ANTES de rodar qualquer kit.
-# v0.2.1. Falha (exit 1) se qualquer resultado diferir do esperado.
+# v0.2.2. Falha (exit 1) se qualquer resultado diferir do esperado.
 param([string]$SaidaDir = 'saida/validacao')
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path $PSScriptRoot -Parent
@@ -12,6 +12,9 @@ $casos = @(
   @{ nome = 'pausa-sem-concluir'; arquivo = 'controlador-oraculo.ps1'; mutante = 'pausa-sem-concluir'; permitir = $true;  esperado = 35 }
   @{ nome = 'prompt-bypass';      arquivo = 'controlador-oraculo.ps1'; mutante = 'prompt-bypass';      permitir = $true;  esperado = 40 }
   @{ nome = 'settings-local';     arquivo = 'controlador-oraculo.ps1'; mutante = 'settings-local';     permitir = $true;  esperado = 40 }
+  @{ nome = 'prompt-stdin';       arquivo = 'controlador-oraculo.ps1'; mutante = 'prompt-stdin';       permitir = $true;  esperado = 40 }
+  @{ nome = 'custo-nao-preservado'; arquivo = 'controlador-oraculo.ps1'; mutante = 'custo-nao-preservado'; permitir = $true; esperado = 39 }
+  @{ nome = 'trapaceiro-caminho'; arquivo = 'controlador-oraculo.ps1'; mutante = 'caminho';            permitir = $true;  esperado = 0 }
   @{ nome = 'espiao';             arquivo = 'controlador-espiao.ps1';  mutante = '';                   permitir = $false; esperado = 0 }
 )
 $falhas = 0

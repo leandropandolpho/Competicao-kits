@@ -1,5 +1,25 @@
 # Mudanças
 
+## v0.2.1 → v0.2.2 (16/10/2026) — correção do defeito A4 (Perplexity) e ajustes finais
+
+O Perplexity (verificador técnico; rodou com Claude Opus 5.5, não vota) deu **APROVADO COM AJUSTES, condicionado ao A4**: um controlador que só lia o nome do cenário no caminho recebido em `-RepoPath` tirava 40/40 sem fazer o trabalho. Como muda pontuação, foi corrigido antes do congelamento e provado por um caso novo na validação.
+
+| Origem | Achado | O que foi feito |
+|---|---|---|
+| Perplexity A4 (**defeito**) | Nome do cenário nos caminhos (`work/C3-altera-teste/...`) | Cada cenário roda numa pasta temporária de nome aleatório, sem pastas de outros cenários ao lado; só depois é copiada para `work/<cenário>`. Regra geral nova: qualquer lógica que tente identificar o cenário (nomes, valores dos parâmetros, `$ClaudeCmd`, arquivos fora dos parâmetros, variáveis) zera a Parte A, verificada pelo júri. Caso novo na validação: **trapaceiro-caminho** (o oráculo procurando o cenário nos caminhos) tem de dar 0. |
+| Perplexity A3 | O auxiliar "custo preservado" do C6 não testava nada (a 1ª execução não gerava custo) | No C6, a 1ª execução agora conclui T0 (custo 0,02) antes de travar em T1; a retomada tem de terminar com custo ≥ 0,04. Caso novo: **custo-nao-preservado** tem de dar 39. |
+| Perplexity A3 | Margem do C7 apertada no Windows | Teto de 0,1 min (6 s) e simulado lento de 10 s. |
+| Perplexity A3 | `MOCK_` sem distinguir maiúsculas pegava nomes como `$useMock_x` | Busca sensível a maiúsculas. |
+| Perplexity A3 | Prompt por stdin não era testado no Windows | Caso novo: **prompt-stdin** tem de dar 40. |
+| Perplexity A1 | Falha do executor que alterou um teste: rollback ou hold? | Passo 5: os gatilhos R1 são verificados antes do rollback; se ocorrerem, vale o `hold`. |
+| Perplexity A1 | Faltava `git add` | Incluído entre os comandos permitidos. |
+| Perplexity A1 | `$MaxMinutos` na retomada | Conta por execução e não se acumula; o custo, sim. |
+| Perplexity A1 | Kit do Claude gerado com acesso à conversa do pacote | Regra de geração: cada competidor, inclusive o Claude, gera o kit numa conversa nova, só com o pacote congelado. |
+| Perplexity A7 | Hashes só impressos; token exposto ao código do kit | O workflow confere cada arquivo contra `SHA256_v*.txt` e falha se divergir; `permissions: contents: read`; `persist-credentials: false`; registra a versão da imagem do runner. |
+| Perplexity A5/A2 | "Deny de Bash desliga a ferramenta PowerShell" | **Não confirmado:** a página que o Claude recebeu em 16/10/2026 não tem essa seção. Registrado na referência como ponto em disputa, com consequência neutra: jurados não penalizam deny de shell em `Bash(...)` nem em `PowerShell(...)`; o piloto confere com `/permissions`. Não entrou na âncora de B1. |
+
+**Não incorporado:** fixar a imagem do Windows (opcional). O workflow passa a registrar a versão da imagem em cada execução.
+
 ## v0.2 → v0.2.1 (16/10/2026) — ajustes finais, candidata ao congelamento
 
 Vereditos da v0.2: **Kimi (Moonshot) APROVADO**; **Le Chat/Vibe (executou GLM-5, da Z.ai) APROVADO COM AJUSTES**. Nenhum defeito que mude pontuação. Pela regra do processo, não há nova rodada de auditoria.

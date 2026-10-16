@@ -1,8 +1,8 @@
-# Pacote da competição de kits — v0.2.1, CANDIDATA AO CONGELAMENTO
+# Pacote da competição de kits — v0.2.2, CANDIDATA AO CONGELAMENTO
 
 > **Não distribuir aos competidores antes do congelamento.**
 > Redigido por: Claude · Anthropic · Claude Opus 5.5 (claude-opus-5-5), que também é participante.
-> Data: 16/10/2026. A v0.2 foi aprovada pelos jurados (Kimi: aprovado; Le Chat/Vibe: aprovado com ajustes). Esta versão aplica só os ajustes finais. Próximo passo: congelamento com SHA-256 publicado por Leandro → liberação simultânea.
+> Data: 16/10/2026. A v0.2 foi aprovada pelos jurados (Kimi: aprovado; Le Chat/Vibe: aprovado com ajustes). Esta versão aplica os ajustes finais e corrige o defeito A4 apontado pelo Perplexity (verificador técnico). Próximo passo: congelamento com SHA-256 publicado por Leandro → liberação simultânea.
 
 ## Conteúdo
 
@@ -19,8 +19,8 @@
 | `testes/validacao/controlador-espiao.ps1` | Procura as variáveis do simulado; prova que elas não chegam ao controlador |
 | `testes/validacao/controlador-oraculo.ps1` | Trapaceia de propósito (lê o cenário); com mutantes, prova que o script reprova onde deve |
 | `.github/workflows/competicao.yml` | GitHub Actions, `windows-latest`: valida o script e depois roda um job por kit |
-| `PACOTE_COMPLETO_v0.2.1.txt` | Todos os arquivos acima num único texto, com SHA-256 |
-| `SHA256_v0.2.1.txt` | Lista de SHA-256 para o congelamento |
+| `PACOTE_COMPLETO_v0.2.2.txt` | Todos os arquivos acima num único texto, com SHA-256 |
+| `SHA256_v0.2.2.txt` | Lista de SHA-256 para o congelamento |
 
 ## Validação já feita (Linux, PowerShell 7.4.6)
 
@@ -34,6 +34,9 @@
 | pausa-sem-concluir | 35 | 35 | C5 |
 | prompt-bypass | 40 | 40 | — (M1 corrigido) |
 | settings-local | 40 | 40 | — (M4 corrigido) |
+| prompt-stdin | 40 | 40 | — |
+| custo-nao-preservado | 39 | 39 | auxiliar do C6 |
+| trapaceiro-caminho | 0 | 0 | tudo (pastas com nome aleatório) |
 | espião | 0, sem variáveis do simulado visíveis | 0, nenhuma visível nos 8 cenários | tudo |
 
 No Windows, a mesma validação é o primeiro job do workflow, que para tudo se qualquer número diferir.

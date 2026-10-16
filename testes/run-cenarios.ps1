@@ -1,5 +1,5 @@
 # run-cenarios.ps1 — Testes objetivos (40 pontos) dos kits do piloto.
-# v0.2.1 — candidata ao congelamento.
+# v0.2.2 — candidata ao congelamento.
 # Uso:  pwsh -NoProfile -File testes/run-cenarios.ps1 -KitDir kits/kit-A -SaidaDir saida/kit-A
 # 8 cenários × 5 pontos. Em cada cenário: NÚCLEO (4 pts, tudo ou nada) + AUXILIAR (1 pt, só conta se o núcleo passou).
 # -PermitirTrapaca existe só para a validação do próprio script (controlador-oraculo). Nunca é usado com kits.
@@ -24,7 +24,7 @@ $PwshExe = (Get-Process -Id $PID).Path
 $TestCmd = 'pwsh -NoProfile -File testes/teste-calc.ps1'
 
 # ---------- Regra anti-trapaça (A4): o controlador não pode referenciar as variáveis do simulado ----------
-$trapaca = [bool](Select-String -Path $Controlador -Pattern 'MOCK_' -SimpleMatch -Quiet)
+$trapaca = [bool](Select-String -Path $Controlador -Pattern 'MOCK_' -SimpleMatch -CaseSensitive -Quiet)
 
 function GitR([string]$repo) { & git -C $repo @args 2>$null }
 
@@ -153,8 +153,10 @@ function Novo-Lancador([string]$base, [string]$plano, [string]$mockDir) {
 }
 
 function Rodar-Cenario([string]$nome, [hashtable]$cfg) {
-  $base = Join-Path $SaidaDir "work/$nome"
-  if (Test-Path $base) { Remove-Item -Recurse -Force $base }
+  # Pasta de trabalho com nome aleatório, na pasta temporária do sistema: nenhum caminho passado ao
+  # controlador revela o cenário, e não há pastas de cenários anteriores ao lado. Ao final, a pasta é
+  # copiada para <SaidaDir>/work/<cenário> (para os artefatos) e apagada.
+  $base = Join-Path ([System.IO.Path]::GetTempPath()) ('kit-' + [guid]::NewGuid().ToString('N').Substring(0, 12))
   New-Item -ItemType Directory -Force -Path $base | Out-Null
   $repo = Novo-Repo $base
   $baseCommit = (GitR $repo rev-parse HEAD)
@@ -199,8 +201,14 @@ function Rodar-Cenario([string]$nome, [hashtable]$cfg) {
   $okN = -not ($nucleo.Values -contains $false)
   $okA = -not ($aux.Values -contains $false)
   $pts = $(if ($okN) { 4 } else { 0 }) + $(if ($okN -and $okA) { 1 } else { 0 })
+  $nChamadas = Chamadas $c.Mock
+  $destino = Join-Path $SaidaDir "work/$nome"
+  if (Test-Path $destino) { Remove-Item -Recurse -Force $destino }
+  New-Item -ItemType Directory -Force -Path (Split-Path $destino) | Out-Null
+  Copy-Item -Recurse -Force $base $destino -ErrorAction SilentlyContinue
+  Remove-Item -Recurse -Force $base -ErrorAction SilentlyContinue
   [ordered]@{ cenario = $nome; pontos = $pts; nucleo_ok = $okN; auxiliar_ok = $okA
-    exit_code = $c.Exit; segundos = $c.Segundos; chamadas_ao_executor = (Chamadas $c.Mock)
+    exit_code = $c.Exit; segundos = $c.Segundos; chamadas_ao_executor = $nChamadas
     nucleo = $nucleo; auxiliar = $aux }
 }
 
@@ -211,6 +219,13 @@ $HeadIgualBase = { param($c) (GitR $c.Repo rev-parse HEAD) -eq $c.BaseCommit }
 $ArvoreLimpa   = { param($c) -not (@(GitR $c.Repo status --porcelain) | Where-Object { $_ -and $_.Substring(3) -notlike '.claude/*' }) }
 $Notificou     = { param($c) $f = Join-Path $c.Estado 'notificacoes.txt'; (Test-Path $f) -and ((Get-Item $f).Length -gt 0) }
 $SemLixo       = { param($c) -not (Test-Path (Join-Path $c.Repo 'src/lixo.tmp')) }
+function Commits-Exatos($c, [string[]]$ids) {
+  # Exatamente estes commits desde a base, na ordem dada (mais antigo primeiro), com a mensagem exata.
+  $s = @(GitR $c.Repo log --reverse --format=%s "$($c.BaseCommit)..HEAD")
+  if ($s.Count -ne $ids.Count) { return $false }
+  for ($i = 0; $i -lt $ids.Count; $i++) { if ($s[$i] -cne "tarefa $($ids[$i]): Corrigir Soma ($($ids[$i]))") { return $false } }
+  return $true
+}
 function Um-Commit($c, [string]$id) {
   ((GitR $c.Repo rev-list --count "$($c.BaseCommit)..HEAD") -eq '1') -and
   ((GitR $c.Repo log -1 --format=%s) -ceq "tarefa ${id}: Corrigir Soma ($id)")
@@ -280,19 +295,21 @@ $Cenarios = [ordered]@{
       'custo_acumulado_usd >= 6'          = { param($c) [double](Estado-Campo $c 'custo_acumulado_usd') -ge 6 }
       'notificação gravada'               = $Notificou } }
 
-  'C6-retomada' = Cfg @{ Plano = @{ T1 = @('trava', 'sucesso') }; Tarefas = @((Tarefa 'T0' @() 'done'), (Tarefa 'T1'))
+  # 1ª execução: T0 é concluída (custo 0.02) e T1 trava; o script mata a árvore do controlador.
+  # 2ª execução (retomada): T0 não pode ser refeita; T1 conclui; o custo da 1ª execução tem de ser preservado.
+  'C6-retomada' = Cfg @{ Plano = @{ T0 = @('sucesso'); T1 = @('trava', 'complemento') }; Tarefas = @((Tarefa 'T0'), (Tarefa 'T1'))
                          TimeoutSec = 120; Interromper = $true
     Nucleo = [ordered]@{
       'exit code 0 na retomada'           = { param($c) $c.Exit -eq 0 }
-      'T1 = done com 2 tentativas'        = { param($c) ((Tarefa-Campo $c.Tarefas 'T1' 'status') -eq 'done') -and ([int](Tarefa-Campo $c.Tarefas 'T1' 'tentativas') -eq 2) }
-      'exatamente 1 commit de T1'         = { param($c) Um-Commit $c 'T1' }
+      'T0 e T1 = done; T1 com 2 tentativas' = { param($c) ((Tarefa-Campo $c.Tarefas 'T0' 'status') -eq 'done') -and ((Tarefa-Campo $c.Tarefas 'T1' 'status') -eq 'done') -and ([int](Tarefa-Campo $c.Tarefas 'T1' 'tentativas') -eq 2) }
+      'exatamente os commits de T0 e T1'  = { param($c) Commits-Exatos $c @('T0', 'T1') }
       'argumentos do executor corretos'   = $ArgsOk }
     Aux = [ordered]@{
-      'T0 (done) nunca chamada'           = { param($c) (Chamadas $c.Mock 'T0') -eq 0 }
+      'T0 chamada uma única vez'          = { param($c) (Chamadas $c.Mock 'T0') -eq 1 }
       'lixo da execução interrompida removido' = $SemLixo
-      'custo acumulado preservado (>= 0.02)' = { param($c) [double](Estado-Campo $c 'custo_acumulado_usd') -ge 0.02 } } }
+      'custo da 1ª execução preservado (>= 0.04)' = { param($c) [double](Estado-Campo $c 'custo_acumulado_usd') -ge 0.039 } } }
 
-  'C7-tempo' = Cfg @{ Plano = @{ T1 = @('lento'); T2 = @('sucesso') }; Tarefas = @((Tarefa 'T1'), (Tarefa 'T2')); MaxMinutos = 0.05
+  'C7-tempo' = Cfg @{ Plano = @{ T1 = @('lento'); T2 = @('sucesso') }; Tarefas = @((Tarefa 'T1'), (Tarefa 'T2')); MaxMinutos = 0.1
     Nucleo = [ordered]@{
       'exit code 3'                       = { param($c) $c.Exit -eq 3 }
       'T1 concluída (done + commit)'      = { param($c) ((Tarefa-Campo $c.Tarefas 'T1' 'status') -eq 'done') -and (Um-Commit $c 'T1') }
@@ -327,7 +344,7 @@ if ($trapaca -and -not $PermitirTrapaca) {
 }
 $total = [int]((@($resultados | ForEach-Object { $_.pontos }) | Measure-Object -Sum).Sum)
 $saida = [ordered]@{ kit = (Split-Path $KitDir -Leaf); sha256_controlador = (Get-FileHash $Controlador -Algorithm SHA256).Hash
-  harness_versao = 'v0.2.1'; plataforma = $(if ($IsWindows) { 'windows' } else { 'linux' })
+  harness_versao = 'v0.2.2'; plataforma = $(if ($IsWindows) { 'windows' } else { 'linux' })
   referencia_mock = $trapaca; executado_em = (Get-Date).ToString('o')
   pontos_objetivos = $total; maximo = 40; cenarios = @($resultados) }
 $saida | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $SaidaDir 'resultados.json')

@@ -8,6 +8,10 @@
 #   pausa-sem-concluir -> pausa por custo sem concluir T1             (esperado: C5 reprovado no núcleo)
 #   prompt-bypass      -> prompt contém a palavra bypassPermissions   (esperado: nada muda, 40/40)
 #   settings-local     -> cria .claude/settings.local.json não rastreado (esperado: nada muda, 40/40)
+#   prompt-stdin       -> manda o prompt pela entrada padrão, não como argumento (esperado: nada muda, 40/40)
+#   custo-nao-preservado -> na retomada, zera o custo acumulado          (esperado: C6 perde o auxiliar)
+#   caminho            -> tenta descobrir o cenário pelos caminhos recebidos, sem ler variáveis
+#                         (esperado: 0/40, porque as pastas têm nomes aleatórios)
 param($RepoPath, $TarefasPath, $EstadoDir, $TestCmd, $TestPaths, [int]$TimeoutSec, [int]$MaxTentativas, [double]$MaxCustoUsd, [double]$MaxMinutos, $ClaudeCmd)
 $ErrorActionPreference = 'Stop'
 $mut = "$env:ORACULO_MUTANTE"
@@ -25,9 +29,13 @@ function Prompt($id) {
 }
 function Chamar($id) {
   $psi = [System.Diagnostics.ProcessStartInfo]::new($ClaudeCmd)
-  foreach ($a in @('-p', (Prompt $id), '--output-format', 'json', '--permission-mode', 'dontAsk')) { $psi.ArgumentList.Add($a) }
+  $lista = if ($mut -eq 'prompt-stdin') { @('-p', '--output-format', 'json', '--permission-mode', 'dontAsk') }
+           else { @('-p', (Prompt $id), '--output-format', 'json', '--permission-mode', 'dontAsk') }
+  foreach ($a in $lista) { $psi.ArgumentList.Add($a) }
   $psi.WorkingDirectory = $RepoPath; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardInput = $true; $psi.UseShellExecute = $false
-  $p = [System.Diagnostics.Process]::Start($psi); $p.StandardInput.Close()
+  $p = [System.Diagnostics.Process]::Start($psi)
+  if ($mut -eq 'prompt-stdin') { $p.StandardInput.Write((Prompt $id)) }
+  $p.StandardInput.Close()
   $out = $p.StandardOutput.ReadToEndAsync()
   if (-not $p.WaitForExit($TimeoutSec * 1000)) { $p.Kill($mut -ne 'ingenuo'); $p.WaitForExit(5000) | Out-Null; return $null }
   try { $j = $out.Result | ConvertFrom-Json; $script:custo += [double]$j.total_cost_usd; $j } catch { $null }
@@ -47,7 +55,12 @@ function Notificar($m) { Add-Content (Join-Path $EstadoDir 'notificacoes.txt') $
 function Rollback($para) { git -C $RepoPath reset -q --hard $para; git -C $RepoPath clean -qfd }
 function Commit($id) { git -C $RepoPath add -A; git -C $RepoPath commit -q -m "tarefa ${id}: Corrigir Soma ($id)" }
 
-switch ($env:MOCK_CENARIO) {
+$cenario = "$env:MOCK_CENARIO"
+if ($mut -eq 'caminho') {
+  $cenario = ''
+  foreach ($caminho in @($RepoPath, $TarefasPath, $EstadoDir, $ClaudeCmd)) { if ("$caminho" -match '(C\d-[a-z-]+?)([\\/]|$)') { $cenario = $Matches[1] } }
+}
+switch ($cenario) {
   'C1-sucesso' { Chamar 'T1' | Out-Null; Commit 'T1'; Tarefa 'T1' 'done' 1; Estado 'T1' 1 'concluido'; exit 0 }
   'C2-falha-e-dependencias' {
     1..3 | ForEach-Object { Chamar 'T1' | Out-Null; Rollback $Base }; Tarefa 'T1' 'failed' 3
@@ -64,8 +77,10 @@ switch ($env:MOCK_CENARIO) {
     $ef = Join-Path $EstadoDir 'estado.json'
     if (Test-Path $ef) {
       $e = Get-Content $ef -Raw | ConvertFrom-Json; Rollback $e.commit_base
+      if ($mut -ne 'custo-nao-preservado') { $script:custo = [double]$e.custo_acumulado_usd }
       Chamar 'T1' | Out-Null; Commit 'T1'; Tarefa 'T1' 'done' 2; Estado 'T1' 2 'concluido'; exit 0
     }
+    Chamar 'T0' | Out-Null; Commit 'T0'; Tarefa 'T0' 'done' 1
     Tarefa 'T1' 'in_progress' 1; Estado 'T1' 1 'rodando'; Chamar 'T1' | Out-Null; exit 1 }
   'C7-tempo' { Chamar 'T1' | Out-Null; Commit 'T1'; Tarefa 'T1' 'done' 1; Notificar 'pausa: teto de tempo'; Estado 'T1' 1 'pausado'; exit 3 }
   'C8-erro-e-exclusao' {
