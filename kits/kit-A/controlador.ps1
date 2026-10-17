@@ -1,781 +1,386 @@
 # controlador.ps1
+# controlador.ps1 — Controlador determinístico do piloto (Claude Code headless como executor).
+# Requer só pwsh 7+ e git. Interface fixa: ESPECIFICACAO.md, seção 3.
+# Princípio: o controlador não confia no executor. Ele mesmo roda o teste, confere os arquivos de
+# teste por SHA-256 e decide commit, rollback ou hold. As regras do settings.json são uma camada a mais,
+# não a barreira.
 param(
-    [Parameter(Mandatory)][string]$RepoPath,
-    [Parameter(Mandatory)][string]$TarefasPath,
-    [Parameter(Mandatory)][string]$EstadoDir,
-    [Parameter(Mandatory)][string]$TestCmd,
-    [Parameter(Mandatory)][string[]]$TestPaths,
-    [int]$TimeoutSec = 900,
-    [int]$MaxTentativas = 3,
-    [double]$MaxCustoUsd = 10,
-    [double]$MaxMinutos = 240,
-    [string]$ClaudeCmd = 'claude'
+  [Parameter(Mandatory)][string]$RepoPath,
+  [Parameter(Mandatory)][string]$TarefasPath,
+  [Parameter(Mandatory)][string]$EstadoDir,
+  [Parameter(Mandatory)][string]$TestCmd,
+  [Parameter(Mandatory)][string[]]$TestPaths,
+  [int]$TimeoutSec     = 900,
+  [int]$MaxTentativas  = 3,
+  [double]$MaxCustoUsd = 10,
+  [double]$MaxMinutos  = 240,
+  [string]$ClaudeCmd   = 'claude'
 )
-
 $ErrorActionPreference = 'Stop'
-$script:Relogio = [Diagnostics.Stopwatch]::StartNew()
-$script:Utf8 = [Text.UTF8Encoding]::new($false)
+Set-StrictMode -Version 3.0
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$Utf8 = [System.Text.UTF8Encoding]::new($false)
 
-function Agora {
-    (Get-Date).ToUniversalTime().ToString('o')
+# Gatilhos R1 por nome de arquivo (além dos testes, migrations e exclusões).
+$ArquivosCriticos = @('package.json', 'package-lock.json', 'requirements.txt', 'pyproject.toml')
+
+# ======================= Registro: estado, log, notificações =======================
+
+function Agora { (Get-Date).ToString('o') }
+
+function Gravar-Atomico([string]$caminho, [string]$texto) {
+  # Grava num temporário ao lado e troca de uma vez: uma interrupção no meio nunca deixa o arquivo pela metade.
+  $tmp = "$caminho.tmp"
+  [System.IO.File]::WriteAllText($tmp, $texto, $Utf8)
+  for ($i = 1; ; $i++) {
+    try { [System.IO.File]::Move($tmp, $caminho, $true); return }
+    catch { if ($i -ge 5) { throw }; Start-Sleep -Milliseconds (100 * $i) }   # antivírus pode segurar o arquivo
+  }
 }
 
-function Dentro-De([string]$caminho, [string]$raiz) {
-    $r = [IO.Path]::GetFullPath($raiz).TrimEnd(
-        [char[]]@('/', '\')
-    )
-    $p = [IO.Path]::GetFullPath($caminho)
-    $cmp = if ($IsWindows) {
-        [StringComparison]::OrdinalIgnoreCase
-    } else {
-        [StringComparison]::Ordinal
-    }
-    return $p.Equals($r, $cmp) -or
-        $p.StartsWith(
-            $r + [IO.Path]::DirectorySeparatorChar, $cmp
-        )
-}
-
-function Gravar-Atomico(
-    [string]$caminho,
-    [string]$conteudo
-) {
-    $temp = "$caminho.$([guid]::NewGuid().ToString('N')).tmp"
-    try {
-        [IO.File]::WriteAllText(
-            $temp, $conteudo, $script:Utf8
-        )
-        if ([IO.File]::Exists($caminho)) {
-            [IO.File]::Replace($temp, $caminho, $null)
-        } else {
-            [IO.File]::Move($temp, $caminho)
-        }
-    } finally {
-        if ([IO.File]::Exists($temp)) {
-            [IO.File]::Delete($temp)
-        }
-    }
-}
-
-function Salvar-Tarefas {
-    Gravar-Atomico $script:TarefasPath (
-        $script:Doc | ConvertTo-Json -Depth 40
-    )
-}
-
-function Salvar-Estado {
-    $script:Estado.atualizado_em = Agora
-    Gravar-Atomico $script:EstadoPath (
-        $script:Estado | ConvertTo-Json -Depth 40
-    )
-}
-
-function Registrar(
-    [string]$evento,
-    [object]$detalhes = $null
-) {
-    $linha = [ordered]@{
-        ts = Agora
-        evento = $evento
-        detalhes = $detalhes
-    } | ConvertTo-Json -Compress -Depth 20
-
-    [IO.File]::AppendAllText(
-        $script:LogPath, "$linha`n", $script:Utf8
-    )
+function Log([string]$evento, [hashtable]$dados = @{}) {
+  $linha = [ordered]@{ ts = (Agora); evento = $evento }
+  foreach ($k in $dados.Keys) { $linha[$k] = $dados[$k] }
+  [System.IO.File]::AppendAllText($script:ArqLog, (($linha | ConvertTo-Json -Compress -Depth 5) + "`n"), $Utf8)
 }
 
 function Notificar([string]$mensagem) {
-    [IO.File]::AppendAllText(
-        $script:NotificacoesPath,
-        "$(Agora) $mensagem`n",
-        $script:Utf8
-    )
-    Registrar 'notificacao' $mensagem
+  # Isolada de propósito: hoje só grava texto; amanhã pode enviar e-mail/WhatsApp sem mexer no resto.
+  [System.IO.File]::AppendAllText($script:ArqNotif, "[$(Agora)] $mensagem`n", $Utf8)
+  Log 'notificacao' @{ mensagem = $mensagem }
 }
 
-function Git([string[]]$argumentos) {
-    $resposta = @(
-        & git -C $script:RepoPath @argumentos 2>&1
-    )
-    if ($LASTEXITCODE -ne 0) {
-        throw "git $($argumentos -join ' ') falhou: $($resposta -join '; ')"
-    }
-    return $resposta
+function Salvar-Estado([string]$status) {
+  # Heartbeat: regravado a cada etapa.
+  $script:Estado.status_execucao     = $status
+  $script:Estado.custo_acumulado_usd = [math]::Round($script:Custo, 6)
+  $script:Estado.atualizado_em       = Agora
+  Gravar-Atomico $script:ArqEstado ($script:Estado | ConvertTo-Json -Depth 6)
 }
 
-function Reverter([string]$base) {
-    if ($base -notmatch '^[0-9a-fA-F]{40,64}$') {
-        throw 'Commit base invalido para rollback.'
-    }
+function Ler-Tarefas { Get-Content -LiteralPath $TarefasPath -Raw -Encoding utf8 | ConvertFrom-Json }
 
-    Git @('reset', '--hard', $base) | Out-Null
-
-    # Preserva configuracao local nao rastreada.
-    Git @('clean', '-fd', '-e', '.claude/') |
-        Out-Null
-
-    Registrar 'rollback' @{
-        commit_base = $base
-    }
+function Normalizar-Tarefas {
+  # Campos ausentes recebem o padrão da especificação (evita erro com um TAREFAS.json escrito à mão).
+  foreach ($t in @($script:Doc.tarefas)) {
+    $padrao = [ordered]@{ depends_on = @(); status = 'pending'; tentativas = 0; critica = $false }
+    foreach ($k in $padrao.Keys) { if (-not $t.PSObject.Properties[$k]) { $t | Add-Member -NotePropertyName $k -NotePropertyValue $padrao[$k] } }
+  }
 }
 
-function Padroes-De-Teste {
-    $p = foreach ($item in $TestPaths) {
-        foreach ($parte in ($item -split ',')) {
-            $limpo = $parte.Trim().Replace('\', '/')
-            if ($limpo) { $limpo }
-        }
-    }
-    return @($p)
+function Salvar-Tarefas { Gravar-Atomico $TarefasPath ($script:Doc | ConvertTo-Json -Depth 10) }
+
+function Definir-Status($tarefa, [string]$status) {
+  $tarefa.status = $status
+  Salvar-Tarefas
+  Log 'status_tarefa' @{ tarefa = $tarefa.id; status = $status; tentativas = $tarefa.tentativas }
 }
 
-function Foto-Dos-Testes {
-    $foto = @{}
-    $padroes = @(Padroes-De-Teste)
+# ======================= Git (única via de escrita no repositório) =======================
 
-    foreach ($arquivo in (
-        Get-ChildItem -LiteralPath $script:RepoPath `
-            -Recurse -Force -File
-    )) {
-        $relativo = [IO.Path]::GetRelativePath(
-            $script:RepoPath, $arquivo.FullName
-        ).Replace('\', '/')
-
-        if (
-            $relativo -eq '.git' -or
-            $relativo.StartsWith('.git/')
-        ) {
-            continue
-        }
-
-        $casou = $false
-        foreach ($padrao in $padroes) {
-            if ($relativo -like $padrao) {
-                $casou = $true
-                break
-            }
-        }
-
-        if ($casou) {
-            $foto[$relativo] = (
-                Get-FileHash -LiteralPath $arquivo.FullName `
-                    -Algorithm SHA256
-            ).Hash
-        }
-    }
-    return $foto
+function Invoke-Git([string[]]$argumentos) {
+  # Argumentos sempre como lista: nada de "-A" ou "--" ser interpretado pelo PowerShell.
+  $saida = & git -C $script:Repo -c core.quotepath=off @argumentos 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "git $($argumentos -join ' ') falhou (código $LASTEXITCODE)" }
+  return $saida
 }
 
-function Testes-Mudaram(
-    [hashtable]$anterior,
-    [hashtable]$atual
-) {
-    if ($anterior.Count -ne $atual.Count) {
-        return $true
-    }
-
-    foreach ($chave in $anterior.Keys) {
-        if (
-            -not $atual.ContainsKey($chave) -or
-            $anterior[$chave] -ne $atual[$chave]
-        ) {
-            return $true
-        }
-    }
-    return $false
+function Invoke-GitLista([string[]]$argumentos) {
+  # Saída separada por NUL (-z): nomes com espaço ou acento chegam intactos.
+  $bruto = Invoke-Git $argumentos
+  return @(("$bruto" -split "`0") | Where-Object { $_ })
 }
 
-function Gatilhos(
-    [string]$base,
-    [hashtable]$hashesAntes
-) {
-    $razoes = [Collections.Generic.List[string]]::new()
-
-    $hashesDepois = Foto-Dos-Testes
-    if (Testes-Mudaram $hashesAntes $hashesDepois) {
-        $razoes.Add(
-            'Arquivo de teste criado, removido ou alterado'
-        )
-    }
-
-    # Compara index e worktree com o commit base.
-    # --no-renames permite identificar exclusoes.
-    $diff = @(
-        Git @(
-            'diff', '--name-status',
-            '--no-renames', $base, '--'
-        )
-    )
-
-    $nomes = [Collections.Generic.List[string]]::new()
-
-    foreach ($linha in $diff) {
-        $partes = ([string]$linha) -split "`t", 2
-        if ($partes.Count -lt 2) { continue }
-
-        $nomes.Add($partes[1].Replace('\', '/'))
-
-        if ($partes[0] -match '^D') {
-            $razoes.Add(
-                "Arquivo rastreado excluido: $($partes[1])"
-            )
-        }
-    }
-
-    foreach ($linha in @(
-        Git @(
-            'ls-files', '--others', '--exclude-standard'
-        )
-    )) {
-        if ($linha) {
-            $nomes.Add(
-                ([string]$linha).Replace('\', '/')
-            )
-        }
-    }
-
-    foreach ($nome in $nomes) {
-        if ($nome -match 'migration') {
-            $razoes.Add("Migration: $nome")
-        }
-
-        $baseNome = ($nome -split '/')[-1]
-
-        if ($baseNome -in @(
-            'package.json',
-            'package-lock.json',
-            'requirements.txt',
-            'pyproject.toml'
-        )) {
-            $razoes.Add(
-                "Manifesto ou dependencia: $nome"
-            )
-        }
-    }
-
-    return @($razoes | Select-Object -Unique)
+function Rollback([string]$base) {
+  # Só dentro do repositório (git -C). settings.local.json não rastreado é do usuário: preservado.
+  Invoke-Git @('reset', '-q', '--hard', $base) | Out-Null
+  Invoke-Git @('clean', '-fdq', '-e', '.claude/settings.local.json') | Out-Null
+  Log 'rollback' @{ para = $base }
 }
 
-function Executar-Processo(
-    [string]$programa,
-    [string[]]$argumentos,
-    [string]$entrada,
-    [int]$limite,
-    [switch]$ComandoWindows
-) {
-    $psi = [Diagnostics.ProcessStartInfo]::new()
-    $psi.UseShellExecute = $false
-    $psi.WorkingDirectory = $script:RepoPath
-    $psi.RedirectStandardInput = $true
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-
-    if ($ComandoWindows) {
-        $psi.FileName = if ($env:ComSpec) {
-            $env:ComSpec
-        } else {
-            'cmd.exe'
-        }
-
-        # Encaminha .cmd/.bat via cmd.exe.
-        $argLinha = @(
-            $argumentos | ForEach-Object {
-                if ($_ -match '[\s"&|<>^%]') {
-                    '"' + $_.Replace('"', '') + '"'
-                } else {
-                    $_
-                }
-            }
-        ) -join ' '
-
-        $psi.Arguments = '/D /S /C ""' +
-            $programa.Replace('"', '') +
-            '" ' + $argLinha + '"'
-    } else {
-        $psi.FileName = $programa
-        foreach ($a in $argumentos) {
-            $psi.ArgumentList.Add($a)
-        }
-    }
-
-    $p = [Diagnostics.Process]::new()
-    $p.StartInfo = $psi
-
-    try {
-        if (-not $p.Start()) {
-            throw 'Nao foi possivel iniciar o processo externo.'
-        }
-
-        # Leitura assincrona evita deadlock dos pipes.
-        $saida = $p.StandardOutput.ReadToEndAsync()
-        $erro = $p.StandardError.ReadToEndAsync()
-
-        if ($entrada) {
-            $p.StandardInput.Write($entrada)
-        }
-        $p.StandardInput.Close()
-
-        $terminou = $p.WaitForExit(
-            [math]::Max(1, $limite) * 1000
-        )
-
-        if (-not $terminou) {
-            # Kill(true) encerra tambem os descendentes.
-            $p.Kill($true)
-            $p.WaitForExit(10000) | Out-Null
-        }
-
-        $saida.Wait(5000) | Out-Null
-        $erro.Wait(5000) | Out-Null
-
-        return [pscustomobject]@{
-            timeout = -not $terminou
-            exit_code = $(if ($terminou) {
-                $p.ExitCode
-            } else {
-                -1
-            })
-            stdout = $(if ($saida.IsCompletedSuccessfully) {
-                $saida.Result
-            } else {
-                ''
-            })
-            stderr = $(if ($erro.IsCompletedSuccessfully) {
-                $erro.Result
-            } else {
-                ''
-            })
-        }
-    } finally {
-        try {
-            if (-not $p.HasExited) {
-                $p.Kill($true)
-            }
-        } catch {}
-        $p.Dispose()
-    }
+function Commitar($tarefa, [string]$base) {
+  # Se o executor fez commits por conta própria, eles são fundidos: sempre 1 commit por tarefa.
+  if ((Invoke-Git @('rev-parse', 'HEAD')) -ne $base) { Invoke-Git @('reset', '-q', '--soft', $base) | Out-Null }
+  Invoke-Git @('add', '-A', '--', '.', ':(exclude).claude/settings.local.json') | Out-Null
+  Invoke-Git @('commit', '-q', '--allow-empty', '-m', "tarefa $($tarefa.id): $($tarefa.titulo)") | Out-Null
+  Log 'commit' @{ tarefa = $tarefa.id; hash = (Invoke-Git @('rev-parse', 'HEAD')) }
 }
 
-function Invocar-Executor([string]$prompt) {
-    $argsExec = @(
-        '-p',
-        '--output-format', 'json',
-        '--permission-mode', 'dontAsk'
-    )
+function Arvore-Suja {
+  # Ignora .claude/ (settings.local.json não rastreado é permitido pela especificação).
+  return @(Invoke-Git @('status', '--porcelain') | Where-Object { $_ -and $_.Substring(3) -notlike '.claude/*' }).Count -gt 0
+}
 
-    $config = Join-Path `
-        $script:RepoPath '.claude/settings.json'
+# ======================= Gatilhos críticos (R1) =======================
 
-    # --settings resolve o problema de allow
-    # em pasta ainda nao confiada.
-    if (Test-Path -LiteralPath $config) {
-        $argsExec += @('--settings', $config)
-    }
+function Padroes-Teste {
+  # Aceita lista PowerShell e também "a/*,b/*" num único texto (pwsh -File).
+  return @($TestPaths | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().Replace('\', '/') -replace '^\./', '' } | Where-Object { $_ })
+}
 
-    # stdin preserva prompts de varias linhas.
-    $eCmd = $ClaudeCmd -match '\.(cmd|bat)$'
+function Hash-Testes {
+  # Rastreados + não rastreados (inclusive ignorados) que casem com algum padrão, com SHA-256.
+  $mapa = [ordered]@{}
+  foreach ($rel in (Invoke-GitLista @('ls-files', '-z', '--cached', '--others') | Sort-Object -Unique)) {
+    if (-not ($script:Padroes | Where-Object { $rel -like $_ })) { continue }
+    $abs = Join-Path $script:Repo $rel
+    $mapa[$rel] = if (Test-Path -LiteralPath $abs -PathType Leaf) { (Get-FileHash -LiteralPath $abs -Algorithm SHA256).Hash } else { 'AUSENTE' }
+  }
+  return $mapa
+}
 
-    return Executar-Processo `
-        $ClaudeCmd $argsExec $prompt $TimeoutSec `
-        -ComandoWindows:$eCmd
+function Gatilhos([string]$base, $hashBase) {
+  $motivos = [System.Collections.Generic.List[string]]::new()
+  # 1) Testes: comparação por hash, não pelo relato do executor nem pelo deny do settings.
+  $hashAgora = Hash-Testes
+  foreach ($rel in (@($hashBase.Keys) + @($hashAgora.Keys) | Sort-Object -Unique)) {
+    $antes = if ($hashBase.Contains($rel)) { $hashBase[$rel] } else { 'AUSENTE' }
+    $depois = if ($hashAgora.Contains($rel)) { $hashAgora[$rel] } else { 'AUSENTE' }
+    if ($antes -ne $depois) { $motivos.Add("arquivo de teste alterado/criado/removido: $rel") }
+  }
+  # 2) Mudanças desde o commit base: rastreados (diff contra a base) + não rastreados.
+  $diff = @(Invoke-GitLista @('diff', '--name-status', '--no-renames', '-z', $base))
+  $mudados = [System.Collections.Generic.List[string]]::new()
+  for ($i = 0; $i + 1 -lt $diff.Count; $i += 2) {
+    $st = $diff[$i]; $rel = $diff[$i + 1]; $mudados.Add($rel)
+    if ($st -eq 'D') { $motivos.Add("arquivo rastreado removido: $rel") }
+    if ($rel -like '.claude/*') { $motivos.Add("configuração do executor alterada: $rel") }
+  }
+  foreach ($rel in (Invoke-GitLista @('ls-files', '-z', '--others', '--exclude-standard'))) { $mudados.Add($rel) }
+  foreach ($rel in $mudados) {
+    if ($rel -match 'migration') { $motivos.Add("migration: $rel") }
+    if ((Split-Path $rel -Leaf) -in $ArquivosCriticos) { $motivos.Add("dependências/manifest: $rel") }
+  }
+  return @($motivos | Sort-Object -Unique)
+}
+
+# ======================= Processos externos (executor e teste) =======================
+
+function Matar-Arvore($proc) {
+  # Timeout = encerramento real do processo e de todos os filhos (o claude.cmd inicia outros processos).
+  try { $proc.Kill($true) } catch { }
+  if ($IsWindows -and -not $proc.HasExited) { & taskkill /T /F /PID $proc.Id 2>$null | Out-Null }
+  $proc.WaitForExit(10000) | Out-Null
+}
+
+function Rodar-Processo([string]$exe, [string[]]$argumentos, [string]$entrada, [int]$timeoutSeg) {
+  $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+  foreach ($a in $argumentos) { $psi.ArgumentList.Add($a) }
+  $psi.WorkingDirectory = $script:Repo
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.StandardOutputEncoding = $Utf8; $psi.StandardErrorEncoding = $Utf8
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
+  # Prompt pela entrada padrão: um .cmd cortaria as quebras de linha se fosse argumento.
+  try {
+    $bytes = $Utf8.GetBytes("$entrada")
+    $p.StandardInput.BaseStream.WriteAsync($bytes, 0, $bytes.Length).Wait($timeoutSeg * 1000) | Out-Null
+    $p.StandardInput.Close()
+  } catch { }   # o processo pode ter saído sem ler a entrada
+  $estourou = -not $p.WaitForExit($timeoutSeg * 1000)
+  if ($estourou) { Matar-Arvore $p }
+  elseif (-not $out.Wait(10000)) { Matar-Arvore $p }   # neto órfão segurando a saída
+  $r = @{ Estourou = $estourou; Codigo = $(if ($estourou) { -1 } else { $p.ExitCode })
+          Saida = $(if ($out.IsCompleted) { $out.Result } else { '' }); Erro = $(if ($err.Wait(2000)) { $err.Result } else { '' }) }
+  $p.Dispose()
+  return $r
+}
+
+function Resolver-Executor {
+  # Acha claude.exe ou claude.cmd pelo PATH/PATHEXT; um caminho completo é usado como está.
+  $cmd = Get-Command -Name $ClaudeCmd -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  return $(if ($cmd) { $cmd.Source } else { $ClaudeCmd })
+}
+
+function Chamar-Executor($tarefa) {
+  $argumentos = @('-p', '--output-format', 'json', '--permission-mode', 'dontAsk')
+  # Confiança da pasta: em claude -p, o allow do settings do projeto é ignorado em pasta não confiada.
+  # Solução: passar a cópia congelada do settings por --settings (vale sem confiança e sem escrever no repo).
+  if ($script:SettingsExecutor) { $argumentos += @('--settings', $script:SettingsExecutor) }
+  $prompt = "$($tarefa.prompt)`n`n---`nRegras do controlador: não altere, crie nem apague arquivos de teste, migrations ou manifestos de dependência; não apague arquivos; não faça commit. O controlador roda os testes e decide."
+  $r = Rodar-Processo $script:Executor $argumentos $prompt $TimeoutSec
+  $json = $null
+  try { $json = $r.Saida.Trim() | ConvertFrom-Json } catch {
+    $ultima = @($r.Saida -split "`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+    try { if ($ultima) { $json = $ultima | ConvertFrom-Json } } catch { }
+  }
+  $custo = 0.0
+  if ($json -and $json.PSObject.Properties['total_cost_usd']) { $custo = [double]$json.total_cost_usd }
+  $falhou = $r.Estourou -or ($r.Codigo -ne 0) -or (-not $json) -or ($json.PSObject.Properties['is_error'] -and $json.is_error -eq $true)
+  $motivo = if ($r.Estourou) { "timeout de $TimeoutSec s" } elseif (-not $json) { 'saída não é JSON' } elseif ($r.Codigo -ne 0) { "código $($r.Codigo)" } elseif ($falhou) { 'is_error' } else { '' }
+  $resumo = if ($json -and $json.PSObject.Properties['result']) { "$($json.result)" } else { $r.Saida }
+  Log 'executor' @{ tarefa = $tarefa.id; tentativa = $tarefa.tentativas; falhou = [bool]$falhou; motivo = $motivo; custo_usd = $custo
+                    sem_custo_registrado = (-not $json); resumo = $resumo.Substring(0, [math]::Min(400, $resumo.Length)) }
+  return @{ Falhou = [bool]$falhou; Custo = $custo }
 }
 
 function Rodar-Teste {
-    # Teste executado pelo controlador, nao pelo agente.
-    return Executar-Processo `
-        'pwsh' `
-        @('-NoProfile', '-Command', $TestCmd) `
-        '' `
-        ([math]::Max(30, $TimeoutSec))
+  # O próprio controlador roda o teste, no repositório; o relato do executor não vale.
+  $r = Rodar-Processo $script:Pwsh @('-NoProfile', '-Command', $TestCmd) '' $TimeoutSec
+  $passou = (-not $r.Estourou) -and ($r.Codigo -eq 0)
+  $saida = "$($r.Saida)$($r.Erro)"
+  Log 'teste' @{ passou = $passou; codigo = $r.Codigo; saida = $saida.Substring([math]::Max(0, $saida.Length - 400)) }
+  return $passou
 }
 
-function Teto-Atingido {
-    return (
-        $script:Estado.custo_acumulado_usd -gt $MaxCustoUsd
-    ) -or (
-        $script:Relogio.Elapsed.TotalMinutes -gt $MaxMinutos
-    )
+# ======================= Limites =======================
+
+function Limite-Estourado {
+  if ($script:Custo -gt $MaxCustoUsd) { return "teto de custo: US$ $([math]::Round($script:Custo, 4)) > US$ $MaxCustoUsd" }
+  if ($script:Relogio.Elapsed.TotalMinutes -gt $MaxMinutos) { return "teto de tempo: $([math]::Round($script:Relogio.Elapsed.TotalMinutes, 2)) min > $MaxMinutos min" }
+  return $null
 }
 
-function Encerrar(
-    [int]$codigo,
-    [string]$status
-) {
-    $script:Estado.status_execucao = $status
-    $script:Estado.tarefa_atual = $null
-    Salvar-Estado
-    Registrar 'fim' @{
-        codigo = $codigo
-        status = $status
+# ======================= Ciclo de uma tarefa =======================
+
+function Proxima-Tarefa {
+  # Primeira 'pending', na ordem do arquivo, com todas as dependências 'done'.
+  foreach ($t in @($script:Doc.tarefas)) {
+    if ($t.status -ne 'pending') { continue }
+    $deps = @($t.depends_on | Where-Object { $_ })
+    $pendentes = @($deps | Where-Object { $d = $_; -not (@($script:Doc.tarefas) | Where-Object { $_.id -eq $d -and $_.status -eq 'done' }) })
+    if ($pendentes.Count -eq 0) { return $t }
+  }
+  return $null
+}
+
+function Executar-Tarefa($tarefa) {
+  # Retorna: 'done' | 'failed' | 'hold' | 'pausa'
+  $base = Invoke-Git @('rev-parse', 'HEAD')
+  $hashBase = Hash-Testes
+  $script:Estado.tarefa_atual = $tarefa.id
+  $script:Estado.commit_base = $base
+  $script:Estado.hash_testes = $hashBase
+  while ([int]$tarefa.tentativas -lt $MaxTentativas) {
+    # Tentativa contada e gravada ANTES da chamada: uma queda no meio não "devolve" a tentativa.
+    $tarefa.tentativas = [int]$tarefa.tentativas + 1
+    $script:Estado.tentativa = $tarefa.tentativas
+    Definir-Status $tarefa 'in_progress'
+    Salvar-Estado 'rodando'
+
+    $exec = Chamar-Executor $tarefa
+    $script:Custo += $exec.Custo
+    Salvar-Estado 'rodando'
+
+    # Gatilhos R1 primeiro: têm precedência sobre falha do executor e sobre o teste. Sem rollback (evidência).
+    $motivos = @(Gatilhos $base $hashBase)
+    if ($motivos.Count) {
+      Definir-Status $tarefa 'hold'
+      Notificar "HOLD na tarefa $($tarefa.id): $($motivos -join '; '). Repositório preservado para análise; nenhuma outra tarefa será iniciada."
+      return 'hold'
     }
-    return $codigo
+    if (-not $exec.Falhou -and (Rodar-Teste)) {
+      Commitar $tarefa $base
+      Definir-Status $tarefa 'done'
+      return 'done'
+    }
+    Rollback $base
+    if ([int]$tarefa.tentativas -ge $MaxTentativas) { break }
+    if (Limite-Estourado) { Definir-Status $tarefa 'pending'; return 'pausa' }   # retoma depois com as tentativas já gastas
+  }
+  Definir-Status $tarefa 'failed'
+  Notificar "Tarefa $($tarefa.id) falhou após $($tarefa.tentativas) tentativa(s)."
+  return 'failed'
 }
 
+# ======================= Preparação e retomada =======================
+
+function Preparar {
+  $script:Repo = (Resolve-Path -LiteralPath $RepoPath).ProviderPath
+  if ("$(Invoke-Git @('rev-parse', '--show-cdup'))".Trim()) { throw "RepoPath precisa ser a raiz de um repositório git: $script:Repo" }
+  New-Item -ItemType Directory -Force -Path $EstadoDir | Out-Null
+  $estadoAbs = (Resolve-Path -LiteralPath $EstadoDir).ProviderPath
+  $tarefasAbs = (Resolve-Path -LiteralPath $TarefasPath).ProviderPath
+  $raiz = $script:Repo.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+  foreach ($c in @($estadoAbs + [System.IO.Path]::DirectorySeparatorChar, $tarefasAbs)) {
+    # O rollback apagaria o estado se ele estivesse dentro do repositório.
+    if ($c.StartsWith($raiz, [System.StringComparison]::OrdinalIgnoreCase)) { throw "TarefasPath e EstadoDir devem ficar FORA do repositório: $c" }
+  }
+  $script:ArqEstado = Join-Path $estadoAbs 'estado.json'
+  $script:ArqLog    = Join-Path $estadoAbs 'log.jsonl'
+  $script:ArqNotif  = Join-Path $estadoAbs 'notificacoes.txt'
+  $script:Padroes   = Padroes-Teste
+  $script:Executor  = Resolver-Executor
+  $script:Pwsh      = (Get-Command -Name pwsh -CommandType Application | Select-Object -First 1).Source
+  # Cópia congelada do settings do projeto, fora do repo, passada por --settings a cada chamada.
+  $script:SettingsExecutor = $null
+  $origem = Join-Path $script:Repo '.claude/settings.json'
+  if (Test-Path -LiteralPath $origem) {
+    $script:SettingsExecutor = Join-Path $estadoAbs 'settings-executor.json'
+    Copy-Item -LiteralPath $origem -Destination $script:SettingsExecutor -Force
+  }
+}
+
+function Retomar {
+  # Custo acumula entre execuções; o tempo não (conta a partir de cada início).
+  $anterior = $null
+  if (Test-Path -LiteralPath $script:ArqEstado) {
+    try { $anterior = Get-Content -LiteralPath $script:ArqEstado -Raw | ConvertFrom-Json } catch { Log 'estado_ilegivel' }
+  }
+  if ($anterior -and $anterior.PSObject.Properties['custo_acumulado_usd']) { $script:Custo = [double]$anterior.custo_acumulado_usd }
+  foreach ($t in @($script:Doc.tarefas | Where-Object { $_.status -eq 'in_progress' })) {
+    $base = if ($anterior -and $anterior.tarefa_atual -eq $t.id -and $anterior.commit_base) { "$($anterior.commit_base)" } else { Invoke-Git @('rev-parse', 'HEAD') }
+    $esperado = "tarefa $($t.id): $($t.titulo)"
+    $headPai = & git -C $script:Repo rev-parse 'HEAD~1' 2>$null
+    if (((Invoke-Git @('log', '-1', '--format=%s')) -ceq $esperado) -and ($headPai -eq $base) -and -not (Arvore-Suja)) {
+      # Caiu entre o commit e a gravação do status: o trabalho já está salvo, não refazer.
+      Definir-Status $t 'done'; Log 'retomada' @{ tarefa = $t.id; acao = 'commit ja existia' }; continue
+    }
+    Rollback $base
+    $novo = if ([int]$t.tentativas -ge $MaxTentativas) { 'failed' } else { 'pending' }
+    Definir-Status $t $novo
+    Log 'retomada' @{ tarefa = $t.id; commit_base = $base; tentativas = $t.tentativas; custo_preservado = $script:Custo }
+  }
+}
+
+# ======================= Principal =======================
+
+$script:Custo = 0.0
+$script:Relogio = [System.Diagnostics.Stopwatch]::StartNew()
+$script:Estado = [ordered]@{ tarefa_atual = $null; tentativa = 0; commit_base = $null; custo_acumulado_usd = 0.0
+  inicio = (Agora); atualizado_em = (Agora); status_execucao = 'rodando'; hash_testes = @{} }
+$codigo = 1
 try {
-    $script:RepoPath = (
-        Resolve-Path -LiteralPath $RepoPath
-    ).ProviderPath
+  Preparar
+  $script:Doc = Ler-Tarefas
+  Normalizar-Tarefas
+  $script:Estado.commit_base = Invoke-Git @('rev-parse', 'HEAD')
+  Log 'inicio' @{ executor = $script:Executor; padroes_teste = $script:Padroes; settings = $script:SettingsExecutor }
+  if (@($script:Doc.tarefas | Where-Object { $_.status -eq 'hold' }).Count) {
+    # Hold exige decisão humana: não mexer no repositório nem iniciar nada.
+    Notificar 'Há tarefa em hold aguardando análise humana. Resolva e mude o status em TAREFAS.json antes de rodar de novo.'
+    Salvar-Estado 'hold'; exit 2
+  }
+  Retomar
+  if (Arvore-Suja) { throw 'Repositório com alterações não commitadas: o rollback as apagaria. Faça commit ou descarte antes.' }
+  Salvar-Estado 'rodando'
 
-    $script:TarefasPath = (
-        Resolve-Path -LiteralPath $TarefasPath
-    ).ProviderPath
+  $resultado = 'fim'
+  while ($true) {
+    $limite = Limite-Estourado
+    if ($limite) { $resultado = 'pausa'; break }
+    $t = Proxima-Tarefa
+    if (-not $t) { break }
+    $r = Executar-Tarefa $t
+    if ($r -eq 'hold') { $resultado = 'hold'; break }
+    if ($r -eq 'pausa') { $resultado = 'pausa'; break }
+  }
 
-    $EstadoDir = [IO.Path]::GetFullPath($EstadoDir)
-
-    if (
-        (Dentro-De $script:TarefasPath $script:RepoPath) -or
-        (Dentro-De $EstadoDir $script:RepoPath)
-    ) {
-        throw 'TarefasPath e EstadoDir devem ficar fora do repositorio.'
+  $script:Estado.tarefa_atual = $null
+  $temFalha = @($script:Doc.tarefas | Where-Object { $_.status -eq 'failed' }).Count -gt 0
+  switch ($resultado) {
+    'hold'  { Salvar-Estado 'hold'; $codigo = 2 }
+    'pausa' { Notificar "Execução pausada — $(Limite-Estourado). Rode de novo (com teto maior) para continuar."; Salvar-Estado 'pausado'; $codigo = 3 }
+    default {
+      if ($temFalha) { Notificar 'Execução terminou com tarefa(s) failed.'; Salvar-Estado 'falhou'; $codigo = 1 }
+      else { Salvar-Estado 'concluido'; $codigo = 0 }
     }
-
-    $gitRoot = (
-        (
-            Git @('rev-parse', '--show-toplevel')
-        ) | Select-Object -First 1
-    ).Trim()
-
-    if (
-        -not (Dentro-De $script:RepoPath $gitRoot) -or
-        -not (Dentro-De $gitRoot $script:RepoPath)
-    ) {
-        throw 'RepoPath deve ser a raiz do repositorio Git.'
-    }
-
-    New-Item -ItemType Directory -Force `
-        -Path $EstadoDir | Out-Null
-
-    $script:EstadoPath = Join-Path `
-        $EstadoDir 'estado.json'
-
-    $script:LogPath = Join-Path `
-        $EstadoDir 'log.jsonl'
-
-    $script:NotificacoesPath = Join-Path `
-        $EstadoDir 'notificacoes.txt'
-
-    $script:Doc = Get-Content `
-        -LiteralPath $script:TarefasPath -Raw |
-        ConvertFrom-Json -Depth 40
-
-    if ($null -eq $script:Doc.tarefas) {
-        throw 'TAREFAS.json nao contem tarefas.'
-    }
-
-    if (Test-Path -LiteralPath $script:EstadoPath) {
-        $script:Estado = Get-Content `
-            -LiteralPath $script:EstadoPath -Raw |
-            ConvertFrom-Json -Depth 40
-    } else {
-        $script:Estado = [pscustomobject]@{
-            tarefa_atual = $null
-            tentativa = 0
-            commit_base = (
-                Git @('rev-parse', 'HEAD') |
-                Select-Object -First 1
-            )
-            custo_acumulado_usd = 0.0
-            inicio = Agora
-            atualizado_em = Agora
-            status_execucao = 'rodando'
-            hashes_testes = @{}
-        }
-    }
-
-    $script:Estado.inicio = Agora
-    $script:Estado.status_execucao = 'rodando'
-    Salvar-Estado
-
-    Registrar 'inicio' @{
-        tarefas = @($script:Doc.tarefas).Count
-        custo_herdado = $script:Estado.custo_acumulado_usd
-    }
-
-    # Retomada: desfaz somente a tarefa interrompida.
-    # Tentativas e custo permanecem persistidos.
-    foreach ($t in @($script:Doc.tarefas)) {
-        if ($t.status -eq 'in_progress') {
-            if ($script:Estado.tarefa_atual -ne $t.id) {
-                throw "Estado inconsistente na retomada: $($t.id)"
-            }
-
-            Reverter ([string]$script:Estado.commit_base)
-
-            $t.status = 'pending'
-            Salvar-Tarefas
-
-            Registrar 'retomada' @{
-                tarefa = $t.id
-                tentativas_preservadas = $t.tentativas
-            }
-        }
-    }
-
-    $script:Estado.tarefa_atual = $null
-    Salvar-Estado
-
-    while ($true) {
-        if (Teto-Atingido) {
-            Notificar (
-                'Pausa: teto de custo ou tempo atingido; ' +
-                'nenhuma nova chamada sera iniciada.'
-            )
-            exit (Encerrar 3 'pausado')
-        }
-
-        # Seleciona primeira tarefa elegivel.
-        $proxima = $null
-
-        foreach ($t in @($script:Doc.tarefas)) {
-            if ($t.status -ne 'pending') {
-                continue
-            }
-
-            $pronta = $true
-
-            foreach ($d in @($t.depends_on)) {
-                $dep = @(
-                    $script:Doc.tarefas |
-                    Where-Object { $_.id -eq $d }
-                )
-
-                if (
-                    $dep.Count -ne 1 -or
-                    $dep[0].status -ne 'done'
-                ) {
-                    $pronta = $false
-                    break
-                }
-            }
-
-            if ($pronta) {
-                $proxima = $t
-                break
-            }
-        }
-
-        if ($null -eq $proxima) {
-            if (
-                @(
-                    $script:Doc.tarefas |
-                    Where-Object { $_.status -eq 'failed' }
-                ).Count -gt 0
-            ) {
-                exit (Encerrar 1 'falhou')
-            }
-
-            if (
-                @(
-                    $script:Doc.tarefas |
-                    Where-Object { $_.status -ne 'done' }
-                ).Count -gt 0
-            ) {
-                Registrar 'dependencia_bloqueada' (
-                    'Nenhuma tarefa pendente esta pronta.'
-                )
-                exit (Encerrar 1 'falhou')
-            }
-
-            exit (Encerrar 0 'concluido')
-        }
-
-        # Baseline duravel antes de iniciar a tentativa.
-        $base = [string](
-            Git @('rev-parse', 'HEAD') |
-            Select-Object -First 1
-        )
-
-        $hashes = Foto-Dos-Testes
-
-        $script:Estado.tarefa_atual = $proxima.id
-        $script:Estado.tentativa = `
-            [int]$proxima.tentativas + 1
-        $script:Estado.commit_base = $base
-        $script:Estado.hashes_testes = $hashes
-
-        Salvar-Estado
-
-        # Contagem registrada ANTES de chamar o executor.
-        $proxima.tentativas = `
-            [int]$proxima.tentativas + 1
-        $proxima.status = 'in_progress'
-        Salvar-Tarefas
-
-        Registrar 'chamada' @{
-            tarefa = $proxima.id
-            tentativa = $proxima.tentativas
-            commit_base = $base
-        }
-
-        $prompt = @"
-Execute somente a tarefa indicada abaixo dentro do repositorio atual.
-Nao altere arquivos de testes, migrations ou manifests; nao apague arquivos rastreados.
-Nao execute git commit ou git push. O controlador executara os testes e fara o commit.
-
-$($proxima.prompt)
-"@
-
-        $retorno = $null
-
-        try {
-            $retorno = Invocar-Executor $prompt
-        } catch {
-            $retorno = [pscustomobject]@{
-                timeout = $false
-                exit_code = -1
-                stdout = ''
-                stderr = $_.Exception.Message
-            }
-        }
-
-        $json = $null
-
-        if ($retorno.stdout.Trim()) {
-            try {
-                $json = $retorno.stdout |
-                    ConvertFrom-Json -Depth 40
-            } catch {
-                $json = $null
-            }
-        }
-
-        # Custo e acumulado mesmo quando a tarefa falha.
-        if (
-            $null -ne $json -and
-            $null -ne $json.total_cost_usd
-        ) {
-            $valor = [double]$json.total_cost_usd
-
-            if (
-                -not [double]::IsNaN($valor) -and
-                -not [double]::IsInfinity($valor) -and
-                $valor -ge 0
-            ) {
-                $script:Estado.custo_acumulado_usd = `
-                    [double]$script:Estado.custo_acumulado_usd +
-                    $valor
-            }
-        }
-
-        Salvar-Estado
-
-        Registrar 'executor_terminou' @{
-            tarefa = $proxima.id
-            exit = $retorno.exit_code
-            timeout = $retorno.timeout
-            custo = $script:Estado.custo_acumulado_usd
-            json_valido = ($null -ne $json)
-        }
-
-        $falhaExecutor = (
-            $retorno.timeout -or
-            $retorno.exit_code -ne 0 -or
-            $null -eq $json -or
-            $json.is_error -eq $true
-        )
-
-        $passou = $false
-
-        if (-not $falhaExecutor) {
-            $resultadoTeste = Rodar-Teste
-            $passou = (
-                -not $resultadoTeste.timeout
-            ) -and (
-                $resultadoTeste.exit_code -eq 0
-            )
-
-            Registrar 'teste' @{
-                tarefa = $proxima.id
-                passou = $passou
-                exit = $resultadoTeste.exit_code
-            }
-        }
-
-        # R1 tem prioridade sobre o resultado do executor
-        # e sobre o resultado dos testes.
-        $criticos = @(Gatilhos $base $hashes)
-
-        if ($criticos.Count -gt 0) {
-            $proxima.status = 'hold'
-            Salvar-Tarefas
-
-            Notificar (
-                "HOLD na tarefa $($proxima.id): " +
-                "$($criticos -join '; '). " +
-                'Evidencia preservada.'
-            )
-
-            exit (Encerrar 2 'hold')
-        }
-
-        if (-not $falhaExecutor -and $passou) {
-            # Somente Git escreve/commita no repositorio.
-            # Configuracao local nao rastreada fica excluida.
-            Git @(
-                'add', '-A', '--', '.',
-                ':(exclude).claude/settings.local.json'
-            ) | Out-Null
-
-            Git @(
-                'commit', '--allow-empty', '-m',
-                "tarefa $($proxima.id): $($proxima.titulo)"
-            ) | Out-Null
-
-            $proxima.status = 'done'
-
-            Registrar 'commit' @{
-                tarefa = $proxima.id
-                commit = (
-                    Git @('rev-parse', 'HEAD') |
-                    Select-Object -First 1
-                )
-            }
-        } else {
-            Reverter $base
-
-            $proxima.status = if (
-                $proxima.tentativas -ge $MaxTentativas
-            ) {
-                'failed'
-            } else {
-                'pending'
-            }
-
-            Registrar 'tentativa_falhou' @{
-                tarefa = $proxima.id
-                tentativa = $proxima.tentativas
-                executor_falhou = $falhaExecutor
-            }
-        }
-
-        Salvar-Tarefas
-        $script:Estado.tarefa_atual = $null
-        Salvar-Estado
-
-        # Limites sao avaliados apos o fluxo normal
-        # da tentativa, antes de iniciar outra chamada.
-        if (Teto-Atingido) {
-            Notificar (
-                "Pausa por limite apos processar a tarefa $($proxima.id)."
-            )
-            exit (Encerrar 3 'pausado')
-        }
-    }
+  }
+  Log 'fim' @{ codigo = $codigo; custo_usd = $script:Custo; minutos = [math]::Round($script:Relogio.Elapsed.TotalMinutes, 3) }
 } catch {
-    if ($script:LogPath) {
-        try {
-            Registrar 'erro_controlador' $_.Exception.Message
-        } catch {}
-    }
-
-    if ($script:Estado) {
-        try {
-            $script:Estado.status_execucao = 'falhou'
-            Salvar-Estado
-        } catch {}
-    }
-
-    Write-Error $_
-    exit 1
+  $msg = "Erro do controlador: $($_.Exception.Message)"
+  try { Notificar $msg; Salvar-Estado 'falhou' } catch { Write-Error $msg }
+  $codigo = 1
 }
+exit $codigo
