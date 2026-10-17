@@ -18,3 +18,8 @@ Fatos registrados:
 - kit-C: o exemplo de TAREFAS.json reproduz marcadores do simulado (`[[Tn]]`); sem efeito na Parte A.
 - kit-D: o competidor se identificou como "Claude Opus 5.5" (copiou a identidade do pacote); o texto entregue é idêntico ao da conversa do DeepSeek.
 - Conflito de interesse: o pacote foi redigido por Claude, que também compete e ficou em 1º por 0,5 ponto.
+
+## Kit escolhido para o piloto: híbrido (17/10/2026)
+- controlador.ps1 e .claude/settings.json do kit-B; CONTEXTO.md do kit-C (1 frase ajustada); TAREFAS.json do kit-A.
+- Motivo: o jurado Kimi confirmou duas falhas de segurança do kit-C não apontadas no julgamento (allow `pwsh -NoProfile -Command *`; executor podia alterar `.claude/` sem detecção) e que o kit-B cobre ambas.
+- Reteste dos 8 cenários: 40/40 no Linux e 40/40 no Windows (execução 39047427071, branch `hibrido`, commit f392439).
