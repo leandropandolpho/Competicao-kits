@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git log *)",
+      "Bash(pwsh -NoProfile -File testes/teste-calc.ps1)",
+      "PowerShell(git status)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git add *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git log *)",
+      "PowerShell(pwsh -NoProfile -File testes/teste-calc.ps1)"
+    ],
+    "deny": [
+      "Edit(./testes/**)",
+      "Edit(./tests/**)",
+      "Edit(./spec/**)",
+      "Edit(./**/*.test.*)",
+      "Edit(./**/*.spec.*)",
+      "Edit(./.git/**)",
+      "Edit(./.claude/**)",
+      "Bash(git push *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(rm *)",
+      "Bash(pwsh *Invoke-Expression*)",
+      "Bash(pwsh *Start-Process*)",
+      "Bash(pwsh *Remove-Item*)",
+      "Bash(pwsh *Invoke-WebRequest*)",
+      "PowerShell(git push *)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(Invoke-Expression *)",
+      "PowerShell(Start-Process *)",
+      "PowerShell(Invoke-WebRequest *)",
+      "PowerShell(curl *)",
+      "PowerShell(wget *)"
+    ]
+  }
+}

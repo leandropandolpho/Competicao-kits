@@ -1,0 +1,31 @@
+{
+  "tarefas": [
+    {
+      "id": "T1",
+      "titulo": "Corrigir bug no código principal",
+      "prompt": "Corrija o erro no arquivo principal para que os testes passem.",
+      "depends_on": [],
+      "status": "pending",
+      "tentativas": 0,
+      "critica": false
+    },
+    {
+      "id": "T2",
+      "titulo": "Adicionar funcionalidade X",
+      "prompt": "Adicione a funcionalidade X conforme descrito na documentação.",
+      "depends_on": ["T1"],
+      "status": "pending",
+      "tentativas": 0,
+      "critica": false
+    },
+    {
+      "id": "T3",
+      "titulo": "Atualizar documentação",
+      "prompt": "Atualize o README com as instruções mais recentes.",
+      "depends_on": [],
+      "status": "pending",
+      "tentativas": 0,
+      "critica": false
+    }
+  ]
+}

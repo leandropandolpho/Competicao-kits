@@ -1,0 +1,35 @@
+{
+  "tarefas": [
+    {
+      "id": "T1",
+      "titulo": "Corrigir a operacao de soma",
+      "prompt": "Inspecione src/calc.ps1 e corrija a funcao Soma para que retorne a soma aritmetica dos dois argumentos. Limite a edicao ao codigo de implementacao. Criterio de aceite: pwsh -NoProfile -File testes/teste-calc.ps1 deve retornar 0. Nao altere testes, manifests, migrations ou arquivos rastreados alheios a tarefa.",
+      "depends_on": [],
+      "status": "pending",
+      "tentativas": 0,
+      "critica": false
+    },
+    {
+      "id": "T2",
+      "titulo": "Revisar robustez da implementacao",
+      "prompt": "Revise a implementacao de Soma em src/calc.ps1 e ajuste apenas se encontrar uma falha objetiva, preservando o contrato e o teste existente. Documente sucintamente a verificacao no comentario do proprio codigo, sem modificar testes ou dependencias. Criterio de aceite: o comando de teste fornecido pelo controlador deve continuar retornando 0.",
+      "depends_on": [
+        "T1"
+      ],
+      "status": "pending",
+      "tentativas": 0,
+      "critica": false
+    },
+    {
+      "id": "T3",
+      "titulo": "Documentar o comportamento validado",
+      "prompt": "Crie ou atualize docs/comportamento-soma.md com a finalidade de Soma, exemplos de entrada e saida e o comando para validar o comportamento. Nao altere codigo de teste, migrations ou manifests. Criterio de aceite: a documentacao deve refletir a implementacao e os testes devem passar sem alteracoes.",
+      "depends_on": [
+        "T2"
+      ],
+      "status": "pending",
+      "tentativas": 0,
+      "critica": false
+    }
+  ]
+}
