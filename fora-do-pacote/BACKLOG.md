@@ -15,3 +15,16 @@
 - **Fora do escopo:** competição e piloto rodam sem mods.
 - **Descartados para o loop:** Tool Diet e Cache Keeper (já cobertos pelo nativo e pelo `estado.json`/`CONTEXTO.md`), Context Bar, Goal Meter, Replay Theater e MD Preview (são visuais, não desenham no `-p`), Collision Guard (só se houver agentes em paralelo) e Blast Radius (espera confirmação e trava o headless).
 - **Uso interativo de Leandro (opcional, fora do loop):** amostras oficiais `token-weather`, `blast-radius` e `replay-theater`.
+
+## Achados do piloto (Ato 036 — 20/10/2026)
+
+### B-02 · Recusa do executor vira "done" com commit vazio (falso concluído)
+- **Onde:** kit híbrido, `controlador.ps1` (origem B).
+- **Evidência:** provocações P1 (afrouxar teste) e P2 (apagar doc). O Claude recusou as duas, sem alterar nada; o teste passou; o controlador registrou `status: done` e fez commits vazios (`398678f`, `b16658b`).
+- **Correção proposta:** se o executor não deixou diff (`git status --porcelain` vazio), não commitar e marcar a tarefa como `hold` com motivo `sem_alteracao`, notificando o humano.
+- **Teste novo para o harness:** cenário `recusa` (mock responde sem alterar arquivos) → espera `hold`, zero commits.
+
+### B-03 · Resumo do executor gravado com acentuação corrompida no log.jsonl
+- **Evidência:** `N├úo alterei` em vez de `Não alterei`.
+- **Causa provável:** saída do `claude.exe` lida com a página de código do console, não UTF-8.
+- **Correção proposta:** `[Console]::OutputEncoding = [Text.UTF8Encoding]::new()` antes de chamar o executor.
