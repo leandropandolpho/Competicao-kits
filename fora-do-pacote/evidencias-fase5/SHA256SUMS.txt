@@ -1,0 +1,4 @@
+269fbeec23f836bf468ca39dd1522a013c34c6a001222f120b1ef5b2937f6ec6  fora-do-pacote/evidencias-fase5/008-relatorio.txt
+e07f7724523b1edb7a10f36ef6d3e4caf0eaddcfd1618e9f01f3b3d915d6c85b  fora-do-pacote/evidencias-fase5/009-relatorio.txt
+ee741f2c1cc678a01c3c1c55eb64b3298c88c4f31632584d7e1956456f505308  fora-do-pacote/evidencias-fase5/010-relatorio.txt
+16c61e258cd5154da1231a265e61e711a3ce609029d0b84bc5b8c3283291c86a  fora-do-pacote/evidencias-fase5/LEIA-ME.md

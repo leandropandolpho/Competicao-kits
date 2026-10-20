@@ -49,3 +49,16 @@
 - Pré-requisitos: (1) modo `run` com saída JSON e custo por chamada comprovados no Windows; (2) acesso a pastas externas bloqueado; (3) chave OpenRouter dedicada, com teto de gasto, só na conta `piloto`.
 - Sequência: prova de conceito só leitura → mesma tarefa nos dois executores → adaptador sem tocar a interface congelada, com regressão 40/40 e provocações P1/P2.
 - **Complemento Perplexity (Ato 045, verificado em fontes externas em 20/10/2026):** acesso a pastas externas é *permitido por padrão* desde a 2.0.25 (mudança sem nota de versão; parte da documentação ainda diz o contrário) e há relatos de PowerShell/bash contornando a regra no Windows (issue anomalyco/opencode#54524); 2.1.0 (20/10/2026) mudou contratos de SDK, eventos HTTP e plugins. Exigências adicionais para a prova de conceito: versão fixa, hash do instalador conferido, `external_directory: deny` (ou `ask`) e teste explícito de escape por PowerShell para fora do repositório.
+
+## Fase 5 — Supervisora (Ato 055)
+
+### B-07 · 2ª opinião de outra família antes de qualquer "liberar" sem supervisão (condição 7 do Ato 047)
+- Provedor B (OpenAI, Responses API com `json_schema` estrito) implementado em `supervisora/supervisora.ps1` (`hibrido@6e37dbc`). Aguardando a chave da OpenAI com teto de gasto na conta `piloto` (`configurar-chave-openai.ps1`).
+- Custo do provedor B fica **desconhecido** (contado pelo teto por chamada) até alguém informar os preços oficiais por milhão de tokens (`-OpenAIPrecoEntradaPorMTokUsd`, `-OpenAIPrecoSaidaPorMTokUsd`).
+
+### B-08 · Contrato entre controlador e supervisora
+- O controlador grava o evento `teste` sem o campo `tarefa`. A supervisora contorna isso usando a janela de eventos da tarefa. Se o kit for revisado um dia, incluir `tarefa` em todos os eventos.
+- Em hold `SEM_ALTERACAO`, o controlador não roda o teste. A supervisora compensa lendo os arquivos citados no pedido.
+
+### B-09 · Fixtures de teste no Windows: final de linha
+- Um `git clone` do repo do piloto gerou hash diferente do arquivo de teste (CRLF/LF), e a supervisora aplicou R1 (corretamente). Fixtures futuras devem copiar os bytes, não clonar.
