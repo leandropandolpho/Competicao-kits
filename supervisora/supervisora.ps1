@@ -28,7 +28,9 @@ param(
   [string]$OpenAIChavePath    = '',
   [double]$OpenAIPrecoEntradaPorMTokUsd = -1,   # sem preço informado, o custo fica DESCONHECIDO (conta pelo teto)
   [double]$OpenAIPrecoSaidaPorMTokUsd   = -1,
-  [string]$OpenAIUrl          = 'https://api.openai.com/v1/responses'
+  [string]$OpenAIUrl          = 'https://api.openai.com/v1/responses',
+  [ValidateSet('supervisora', 'arbitro')][string]$Papel = 'supervisora',
+  [string]$PareceresPath      = ''    # JSON com pareceres de outras supervisoras (rodada de troca / desempate)
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
@@ -87,6 +89,21 @@ REGRAS:
 4. Responda apenas no formato JSON pedido.
 '@
 
+$Instrucoes += @'
+
+SOBRE PARECERES DE OUTRAS SUPERVISORAS (quando houver a seção pareceres_de_outras_supervisoras):
+São opiniões de outras LLMs sobre o MESMO dossiê. Considere os argumentos delas, mas decida pelas evidências
+do controlador; mude de posição só se o argumento apontar evidência que você deixou de ver.
+'@
+if ($Papel -eq 'arbitro') {
+  $Instrucoes += @'
+
+VOCÊ É O ÁRBITRO (voto de Minerva): duas supervisoras divergiram mesmo depois de trocar argumentos.
+Decida com base nas evidências. Se as evidências não bastarem para uma decisão segura, responda "escalar".
+Use confiança "alta" só se não houver dúvida razoável; qualquer outra confiança leva o caso ao humano.
+'@
+}
+
 # ======================= Dossiê =======================
 function Gatilhos-Atuais($estadoJson) {
   # Recalcula aqui (não confia no relato): testes com hash diferente do registrado pelo controlador.
@@ -142,6 +159,7 @@ function Montar-Dossie($tarefa, $estadoJson, $eventos, [string[]]$notifs) {
     eventos_do_controlador = @($eventosLimpos | Select-Object -Last 30)
     contexto_do_projeto = $contexto
     relato_do_executor_NAO_CONFIAVEL = @($relatos | ForEach-Object { Cortar ($_ -replace '<<<|>>>', '') 1200 })
+    pareceres_de_outras_supervisoras = $script:Pareceres
   }
 }
 
@@ -274,13 +292,19 @@ if (Test-Path -LiteralPath $arqLog) { $eventos = @(Get-Content -LiteralPath $arq
 $arqNot = Join-Path $Estado 'notificacoes.txt'
 $notifs = @(if (Test-Path -LiteralPath $arqNot) { Get-Content -LiteralPath $arqNot -Encoding utf8 })
 
+$script:Pareceres = @()
+if ($PareceresPath -and (Test-Path -LiteralPath $PareceresPath)) {
+  $script:Pareceres = @((Get-Content -LiteralPath $PareceresPath -Raw -Encoding utf8 | ConvertFrom-Json) | ForEach-Object {
+    [ordered]@{ supervisora = "$(Prop $_ 'supervisora')"; decisao = "$(Prop $_ 'decisao')"; confianca = "$(Prop $_ 'confianca')"
+                justificativa = Cortar ("$(Prop $_ 'justificativa')" -replace '<<<|>>>', '') 1500 } })
+}
 $alvos = @($doc.tarefas | Where-Object { $_.status -in @('hold', 'failed') })
 if (-not $alvos.Count) { "Nenhuma tarefa em hold ou failed: nada para a supervisora."; exit 0 }
 
 $resultados = @()
 foreach ($t in $alvos) {
   $dossie = Montar-Dossie $t $estadoJson $eventos $notifs
-  $rec = [ordered]@{ ts = Agora; tarefa = "$($t.id)"; status_tarefa = "$($t.status)"; provedor = $Provedor; modelo = ''
+  $rec = [ordered]@{ ts = Agora; tarefa = "$($t.id)"; status_tarefa = "$($t.status)"; provedor = $Provedor; papel = $Papel; modelo = ''
                      decisao = 'escalar'; origem = ''; motivo_override = ''; confianca = ''; justificativa = ''
                      evidencias = @(); acao_proposta = ''; prompt_replanejado = ''; custo_usd = 0.0; custo_desconhecido = $false
                      versao_dossie = $VersaoDossie }
