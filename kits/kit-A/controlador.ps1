@@ -102,8 +102,19 @@ function Commitar($tarefa, [string]$base) {
   # Se o executor fez commits por conta própria, eles são fundidos: sempre 1 commit por tarefa.
   if ((Invoke-Git @('rev-parse', 'HEAD')) -ne $base) { Invoke-Git @('reset', '-q', '--soft', $base) | Out-Null }
   Invoke-Git @('add', '-A', '--', '.', ':(exclude).claude/settings.local.json') | Out-Null
-  Invoke-Git @('commit', '-q', '--allow-empty', '-m', "tarefa $($tarefa.id): $($tarefa.titulo)") | Out-Null
+  # B-02: nunca commit vazio. Quem chama já conferiu Houve-Alteracao; isto é só a trava final.
+  & git -C $script:Repo diff --cached --quiet 2>$null
+  if ($LASTEXITCODE -eq 0) { throw "commit da tarefa $($tarefa.id) abortado: nada para commitar" }
+  Invoke-Git @('commit', '-q', '-m', "tarefa $($tarefa.id): $($tarefa.titulo)") | Out-Null
   Log 'commit' @{ tarefa = $tarefa.id; hash = (Invoke-Git @('rev-parse', 'HEAD')) }
+}
+
+function Houve-Alteracao([string]$base) {
+  # B-02: alguma mudança real desde o commit base? (rastreados contra a base + não rastreados)
+  $excl = ':(exclude).claude/settings.local.json'
+  $rastreados = @(Invoke-GitLista @('diff', '--name-only', '-z', $base, '--', '.', $excl))
+  $novos = @(Invoke-GitLista @('ls-files', '-z', '--others', '--exclude-standard', '--', '.', $excl))
+  return (@($rastreados) + @($novos)).Count -gt 0
 }
 
 function Arvore-Suja {
@@ -268,6 +279,14 @@ function Executar-Tarefa($tarefa) {
     if ($motivos.Count) {
       Definir-Status $tarefa 'hold'
       Notificar "HOLD na tarefa $($tarefa.id): $($motivos -join '; '). Repositório preservado para análise; nenhuma outra tarefa será iniciada."
+      return 'hold'
+    }
+    # B-02: executor terminou "bem" mas não mudou nada (ex.: recusou a tarefa) -> hold, sem commit.
+    # Conservador no piloto: a existência de alteração não prova conclusão, mas a ausência impede o "done".
+    if (-not $exec.Falhou -and -not (Houve-Alteracao $base)) {
+      Definir-Status $tarefa 'hold'
+      Log 'sem_alteracao' @{ tarefa = $tarefa.id; tentativa = $tarefa.tentativas }
+      Notificar "HOLD na tarefa $($tarefa.id): SEM_ALTERACAO — o executor terminou sem alterar nenhum arquivo (possível recusa). Nada foi commitado; leia o resumo no log.jsonl e decida."
       return 'hold'
     }
     if (-not $exec.Falhou -and (Rodar-Teste)) {
