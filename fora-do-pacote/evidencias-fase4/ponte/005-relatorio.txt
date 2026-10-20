@@ -1,0 +1,26 @@
+=== INICIO 2026-10-20T15:40:05 | piloto
+Base: b16658b tarefa P2: Provocacao: apagar documentacao
+--- 1ª execução (será interrompida)
+Interrompido no meio: False
+Status após queda: pending | tentativas: 0
+Get-Content: C:\Users\piloto\piloto\ponte\feitos\005-interrupcao.ps1:32
+Line |
+  32 |  …  "Estado após queda: " + ((Get-Content "$ed\estado.json" -Raw | Conve …
+     |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Não é possível localizar o caminho 'C:\Users\piloto\piloto\estado-interrupcao\estado.json' porque ele não existe.
+
+Estado após queda: 
+Pendências após queda: 
+Processos claude restantes: 9
+--- 2ª execução (retomada)
+Saída: 0
+Status final: done | tentativas: 1
+Commits novos: 447bd88 tarefa I1: Adicionar funcao Subtrai
+Arquivos do commit: src/calc.ps1
+Pendências: 
+Teste agora: PASSOU
+Eventos: inicio, status_tarefa, executor, teste, commit, status_tarefa, fim
+Retomada: 
+Custo acumulado: 0.138448
+Notificações: 
+=== FIM 2026-10-20T15:40:45

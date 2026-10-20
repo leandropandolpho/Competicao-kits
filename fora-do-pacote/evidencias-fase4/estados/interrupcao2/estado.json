@@ -1,0 +1,12 @@
+{
+  "tarefa_atual": null,
+  "tentativa": 2,
+  "commit_base": "447bd889844b9883056bdaad050ecafe3b96b9fd",
+  "custo_acumulado_usd": 0.126962,
+  "inicio": "2026-10-20T15:42:27.1890488-04:00",
+  "atualizado_em": "2026-10-20T15:42:40.9586789-04:00",
+  "status_execucao": "concluido",
+  "hash_testes": {
+    "testes/teste-calc.ps1": "C29BB1DDFE4343504F147B4C87660A8663B68F6A6F4F7B6CB325BB21F2F06E3C"
+  }
+}

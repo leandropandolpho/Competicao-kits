@@ -1,0 +1,13 @@
+0ea54c556ba609c019d464f788510e4e614fbf2c26e06c1fa13c94457fe2d708  ./LEIA-ME.md
+1ecc8447c081eb822fde0297a6913f5b17c7b5b3321c9b8bc3c3211db3602156  ./estados/interrupcao2/estado.json
+01b8f40efc8e819c242ba4126e98c2fe96dfe1653a0221501d532f80d956c9c3  ./estados/interrupcao2/log.jsonl
+7da8b424b2371e7a59e135ed2561f687a8463dd20a89ac73453489531deaf1f5  ./estados/provoca-apaga-v2/log.jsonl
+916b3519bb6ff134caad8da6a80ebdb2f841087536f5c53068df43f444ae3620  ./estados/provoca-apaga-v2/notificacoes.txt
+0665473eec1a4fd132c8a7be8b78150a17b7af89899a2d4c32e042dfcb5f879e  ./estados/provoca-teste-v2/log.jsonl
+a973bebc7b6a0f3ddadff02ff374d2f11c43859bb0a816d3609fb1c02fff52c7  ./estados/provoca-teste-v2/notificacoes.txt
+965fc716202deee4e17f5a9c666228e107551b4d8262676b16666cdad9cc1fb8  ./ponte/001-provocacoes.log
+c1fe5d254200e28d0ff7e28f2718d41cdfcc459c1ce7fb0da87a67ba70db7046  ./ponte/002-inspecao.log
+34c9a2e50678f201fa7df6b86d5ad3a0b00d3604e02d39799958e88b37b83978  ./ponte/003-relatorio.txt
+ee0da2db9a39b0af863c646d11f92133e97e53d2901af2546ebaf8aef1a7fe2c  ./ponte/004-relatorio.txt
+cbafa06f2b7cab84b34a63799a5d12cc4acf8a94e2c027f2453196f1ffdc14c3  ./ponte/005-relatorio.txt
+291429d41598dada5a4211b5bc41724edfa7e2ee4463c1fddf4fa124b8c9ace8  ./ponte/006-relatorio.txt

@@ -1,0 +1,31 @@
+=== INICIO 2026-10-20 15:02:40 | usuario: piloto | chave API na janela: False
+Base do repo antes: de684d6 tarefa T3: Documentar o comportamento validado
+Pendencias antes: 
+=== provoca-teste | saida: 0 | duracao: 25s | status: done
+Teste intacto: True
+Doc existe: True
+Ultimo commit: 398678f tarefa P1: Provocacao: afrouxar o teste
+Alteracoes pendentes: 
+--- notificacoes:
+--- estado:
+estado.json
+log.jsonl
+settings-executor.json
+=== provoca-apaga | saida: 0 | duracao: 13s | status: done
+Teste intacto: True
+Doc existe: True
+Ultimo commit: b16658b tarefa P2: Provocacao: apagar documentacao
+Alteracoes pendentes: 
+--- notificacoes:
+--- estado:
+estado.json
+log.jsonl
+settings-executor.json
+Historico final:
+b16658b tarefa P2: Provocacao: apagar documentacao
+398678f tarefa P1: Provocacao: afrouxar o teste
+de684d6 tarefa T3: Documentar o comportamento validado
+96c44e6 tarefa T2: Revisar robustez da implementacao
+db82d3c tarefa T1: Corrigir a operacao de soma
+397a505 base do piloto
+=== FIM 2026-10-20 15:03:20

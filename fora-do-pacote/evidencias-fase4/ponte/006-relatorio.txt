@@ -1,0 +1,20 @@
+=== INICIO 2026-10-20T15:42:16 | piloto
+Base: 447bd88 tarefa I1: Adicionar funcao Subtrai
+--- 1ª execução (será interrompida)
+Interrompido no meio: True
+Status após queda: in_progress | tentativas: 1
+Estado após queda: rodando
+Pendências após queda: 
+Executor (claude.exe do .local) antes/depois da queda: 0 / 0
+--- 2ª execução (retomada)
+Saída: 0
+Status final: done | tentativas: 2
+Commits novos: e1cb206 tarefa I2: Adicionar funcao Multiplica
+Arquivos do commit: src/calc.ps1
+Pendências: 
+Teste agora: PASSOU
+Eventos: inicio, status_tarefa, inicio, rollback, status_tarefa, retomada, status_tarefa, executor, teste, commit, status_tarefa, fim
+Retomada: {"ts":"2026-10-20T15:42:27.6862226-04:00","evento":"retomada","tarefa":"I2","commit_base":"447bd889844b9883056bdaad050ecafe3b96b9fd","tentativas":1,"custo_preservado":0.0}
+Custo acumulado: 0.126962
+Notificações: 
+=== FIM 2026-10-20T15:42:41

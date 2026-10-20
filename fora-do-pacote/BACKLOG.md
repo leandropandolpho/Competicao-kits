@@ -36,3 +36,15 @@
 
 ### B-04 · Executor não conseguiu rodar o teste dentro da sessão (observação)
 - No P1 v2, o Claude relatou que "a execução do PowerShell foi negada nesta sessão". O allow cobre só `pwsh -NoProfile -File testes/*`; ele provavelmente tentou outra forma. Não afeta a segurança (o controlador roda o teste), mas reduz a capacidade do executor de verificar o próprio trabalho. Avaliar após o piloto.
+
+### B-05 · Interrupção: custo da chamada derrubada não entra na conta; órfãos sem prova no Windows
+- Retomada (Ato 038, `006`): `custo_preservado: 0.0`, porque o executor morto não devolveu `total_cost_usd`. O teto de custo subestima o gasto real numa queda.
+- O verificador de `claude.exe` do teste 006 contou 0 até antes da queda (filtro de caminho provavelmente errado): ausência de órfãos não comprovada no Windows real (no harness, C4 cobre).
+- Avaliar: estimativa conservadora de custo para chamada interrompida; verificação de órfãos pelo PID da árvore.
+
+## Fase 6
+
+### B-06 · Avaliar o OpenCode 2.x como executor alternativo e base das consultoras (decisão A — Atos 040/041, convergência ChatGPT, Gemini e Claude)
+- Nada instalado antes de a fase 4 fechar; teste junto da fase 6, comparado com o PAL MCP em tarefas equivalentes e critérios objetivos.
+- Pré-requisitos: (1) modo `run` com saída JSON e custo por chamada comprovados no Windows; (2) acesso a pastas externas bloqueado; (3) chave OpenRouter dedicada, com teto de gasto, só na conta `piloto`.
+- Sequência: prova de conceito só leitura → mesma tarefa nos dois executores → adaptador sem tocar a interface congelada, com regressão 40/40 e provocações P1/P2.

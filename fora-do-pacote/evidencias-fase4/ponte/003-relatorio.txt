@@ -1,0 +1,35 @@
+=== INICIO 2026-10-20T15:36:35 | piloto
+Commit clonado: 7cd786462e27c81f3711c37ab5ee73da83c01a6d
+Hash controlador: CED2EC45BE2FF8405C57874BC29373F7E8AC6F20B696DEE512A3E562F3E6608E | confere: True
+===== HARNESS CONGELADO v0.2.2
+== C1-sucesso ==
+  => 5/5 pts (exit=0, 5,2s)
+== C2-falha-e-dependencias ==
+  => 5/5 pts (exit=1, 14,5s)
+== C3-altera-teste ==
+  => 5/5 pts (exit=2, 2,4s)
+== C4-trava ==
+  => 5/5 pts (exit=1, 16,6s)
+== C5-custo ==
+  => 5/5 pts (exit=3, 3,6s)
+== C6-retomada ==
+  => 5/5 pts (exit=0, 3,9s)
+== C7-tempo ==
+  => 5/5 pts (exit=3, 13,6s)
+== C8-erro-e-exclusao ==
+  => 5/5 pts (exit=2, 6,1s)
+TOTAL OBJETIVO: 40 / 40
+===== CENÁRIO ADICIONAL
+  [ok] exit code 2 (hold)
+  [ok] T1 = done
+  [ok] T2 = hold
+  [ok] exatamente 1 commit (T1)
+  [ok] nenhum commit vazio
+  [ok] notificação SEM_ALTERACAO
+  [ok] evento sem_alteracao no log
+  [ok] B-03: acento íntegro no resumo ("função")
+  [ok] controlador sem --allow-empty
+RESULTADO cenario-recusa: APROVADO
+===== INSTALAÇÃO NO KIT DO PILOTO
+Kit instalado: True
+=== FIM 2026-10-20T15:38:37

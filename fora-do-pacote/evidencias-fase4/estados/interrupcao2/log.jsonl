@@ -1,0 +1,12 @@
+{"ts":"2026-10-20T15:42:17.8190749-04:00","evento":"inicio","padroes_teste":"testes/*","settings":"C:\\Users\\piloto\\piloto\\estado-interrupcao2\\settings-executor.json","executor":"C:\\Users\\piloto\\.local\\bin\\claude.exe"}
+{"ts":"2026-10-20T15:42:18.1023737-04:00","evento":"status_tarefa","tarefa":"I2","status":"in_progress","tentativas":1}
+{"ts":"2026-10-20T15:42:27.4157177-04:00","evento":"inicio","executor":"C:\\Users\\piloto\\.local\\bin\\claude.exe","padroes_teste":"testes/*","settings":"C:\\Users\\piloto\\piloto\\estado-interrupcao2\\settings-executor.json"}
+{"ts":"2026-10-20T15:42:27.6622172-04:00","evento":"rollback","para":"447bd889844b9883056bdaad050ecafe3b96b9fd"}
+{"ts":"2026-10-20T15:42:27.6835528-04:00","evento":"status_tarefa","tarefa":"I2","tentativas":1,"status":"pending"}
+{"ts":"2026-10-20T15:42:27.6862226-04:00","evento":"retomada","tarefa":"I2","commit_base":"447bd889844b9883056bdaad050ecafe3b96b9fd","tentativas":1,"custo_preservado":0.0}
+{"ts":"2026-10-20T15:42:27.8871428-04:00","evento":"status_tarefa","tarefa":"I2","tentativas":2,"status":"in_progress"}
+{"ts":"2026-10-20T15:42:38.4232752-04:00","evento":"executor","sem_custo_registrado":false,"motivo":"","custo_usd":0.12696220000000003,"falhou":false,"tarefa":"I2","resumo":"Adicionei a função `Multiplica($a, $b)` no fim de `src/calc.ps1:9-10`, com o comentário `# Multiplica: retorna $a * $b (ex.: Multiplica 4 3 = 12).` no mesmo formato do comentário de `Subtrai`.\n\nNão alterei a função `Soma` nem os testes, e não fiz commit. Também não rodei os testes, porque quem roda é o controlador.","tentativa":2}
+{"ts":"2026-10-20T15:42:39.7942949-04:00","evento":"teste","saida":"PASSOU\r\n","passou":true,"codigo":0}
+{"ts":"2026-10-20T15:42:40.9477346-04:00","evento":"commit","tarefa":"I2","hash":"e1cb206bf11b498e4148274eb211f0a023760abd"}
+{"ts":"2026-10-20T15:42:40.9513241-04:00","evento":"status_tarefa","tarefa":"I2","tentativas":2,"status":"done"}
+{"ts":"2026-10-20T15:42:40.9612036-04:00","evento":"fim","minutos":0.23,"custo_usd":0.12696220000000003,"codigo":0}
