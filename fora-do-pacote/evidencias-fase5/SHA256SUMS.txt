@@ -4,5 +4,6 @@ ee741f2c1cc678a01c3c1c55eb64b3298c88c4f31632584d7e1956456f505308  fora-do-pacote
 9d837e24422466f87f7c548c45f7676205a72b19948aa1dce2a1bde367ff0787  fora-do-pacote/evidencias-fase5/011-relatorio.txt
 81db93b2fda63800e328f6f1d031c9224a83c7a00ba5a9dbfb1cc4658fbe03e6  fora-do-pacote/evidencias-fase5/012-relatorio.txt
 c1e705d1ea4cf92e50b40bc59b2db465615caa2f83fb8a257ce1304d1b152690  fora-do-pacote/evidencias-fase5/013-relatorio.txt
-799f35c24acbe2b39868ed45c632c5c8f1a5ccfec92d96b3c81f55e494b3f8a1  fora-do-pacote/evidencias-fase5/SHA256SUMS.txt
-e44c7f215cf9eaf5b965b830e2ee1fa9f4dedb3143edd3ef3b8d3dc0ba08a126  fora-do-pacote/evidencias-fase5/LEIA-ME.md
+3d30687c9c26d058fa1adc2203ccaa6dc4bac89c9cb49a173aa16f32d4325e00  fora-do-pacote/evidencias-fase5/014-relatorio.txt
+21539f3a6312ae13ba97550b996047d5511bfcdec4a9f4041d4985a3a34d9d13  fora-do-pacote/evidencias-fase5/SHA256SUMS.txt
+4533a0f21f1f0e3574ac2dcf048230cb7de60996136480ebc88939b96197614d  fora-do-pacote/evidencias-fase5/LEIA-ME.md

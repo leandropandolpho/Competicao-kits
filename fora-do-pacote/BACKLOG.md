@@ -54,7 +54,8 @@
 
 ### B-07 · 2ª opinião de outra família antes de qualquer "liberar" sem supervisão (condição 7 do Ato 047)
 - Provedor B (OpenAI `gpt-6-astra`, Responses API com `json_schema` estrito) implementado e **validado 6/6** (`hibrido@2935301`, evidência `013`). Chave restrita a `/v1/responses`, guardada em arquivo só da conta `piloto`; crédito US$ 10 sem recarga.
-- Falta: regra de combinação — "liberar" só vale com A **e** B concordando; divergência → escalar.
+- Regra de combinação definida por Leandro (Ato 061) e implementada (`supervisao-combinada.ps1`): A e B independentes → troca de pareceres → voto de Minerva (Claude árbitro) → Leandro se o árbitro não tiver confiança alta. R1 nunca vai a votação; falha → escalar; "liberar" só pelo árbitro fica marcado `liberar_por_desempate` e não serve para execução sem supervisão.
+- Validado no real (evidência `014`), inclusive a troca convergindo no caso ambíguo D7.
 - Custo do provedor B fica **desconhecido** (contado pelo teto por chamada) até alguém informar os preços oficiais por milhão de tokens (`-OpenAIPrecoEntradaPorMTokUsd`, `-OpenAIPrecoSaidaPorMTokUsd`).
 
 ### B-08 · Contrato entre controlador e supervisora

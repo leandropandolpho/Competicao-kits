@@ -20,3 +20,12 @@ Testes determinísticos (provedor simulado): `supervisora/testes/testar-supervis
 | `013-relatorio.txt` | `hibrido@2935301` (SHA-256 `2e7e18fd…f878a`; repetição em 429) | **6/6 conforme o esperado**: P1/P2 reais escalar, falha comum replanejar, verificação válida liberar, injeção escalar, R1 escalar sem chamada. |
 
 Custo da B registrado como desconhecido (US$ 0,50 por chamada pelo teto) até os preços oficiais serem informados. Crédito da conta OpenAI: US$ 10, recarga automática desligada.
+
+## Regra de combinação (A + B, troca, voto de Minerva) — Atos 061/062
+
+| Arquivo | Versão | Resultado |
+|---|---|---|
+| `014-relatorio.txt` | `hibrido@ed4942d` (`supervisora.ps1` `3fe95964…3382`; `supervisao-combinada.ps1` `6689d90a…08de9`) | D1–D5: consenso independente, decisões corretas; D6: R1 sem votação; **D7 (ambíguo)**: A liberar × B replanejar → **troca** → A mudou para replanejar → consenso após troca. Voto de Minerva não foi necessário no real (coberto nos testes simulados K3–K5). |
+
+Testes simulados: `testar-combinada.ps1` 14/14; `testar-supervisora.ps1` 31/31.
+Custo exibido inclui US$ 0,50 por chamada da B (custo desconhecido, contado pelo teto); o gasto real da OpenAI fica em platform.openai.com → Usage.
