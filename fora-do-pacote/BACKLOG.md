@@ -53,7 +53,8 @@
 ## Fase 5 — Supervisora (Ato 055)
 
 ### B-07 · 2ª opinião de outra família antes de qualquer "liberar" sem supervisão (condição 7 do Ato 047)
-- Provedor B (OpenAI, Responses API com `json_schema` estrito) implementado em `supervisora/supervisora.ps1` (`hibrido@6e37dbc`). Aguardando a chave da OpenAI com teto de gasto na conta `piloto` (`configurar-chave-openai.ps1`).
+- Provedor B (OpenAI `gpt-6-astra`, Responses API com `json_schema` estrito) implementado e **validado 6/6** (`hibrido@2935301`, evidência `013`). Chave restrita a `/v1/responses`, guardada em arquivo só da conta `piloto`; crédito US$ 10 sem recarga.
+- Falta: regra de combinação — "liberar" só vale com A **e** B concordando; divergência → escalar.
 - Custo do provedor B fica **desconhecido** (contado pelo teto por chamada) até alguém informar os preços oficiais por milhão de tokens (`-OpenAIPrecoEntradaPorMTokUsd`, `-OpenAIPrecoSaidaPorMTokUsd`).
 
 ### B-08 · Contrato entre controlador e supervisora
