@@ -205,12 +205,29 @@ function Provedor-OpenAI([string]$entrada) {
     input = @(@{ role = 'system'; content = $Instrucoes }, @{ role = 'user'; content = $entrada })
     text = @{ format = [ordered]@{ type = 'json_schema'; name = 'recomendacao_supervisora'; strict = $true; schema = $esq } }
   } | ConvertTo-Json -Depth 12
+  # 429 (limite de requisições da conta) é comum em contas novas: até 3 tentativas, respeitando Retry-After.
+  # Erro HTTP com resposta do servidor = requisição não processada = custo 0 conhecido.
+  # Sem resposta (timeout/rede) = custo desconhecido (conta pelo teto, B-05).
+  $r = $null; $tentativa = 0
   try {
-    $r = Invoke-RestMethod -Method Post -Uri $OpenAIUrl -Headers @{ Authorization = "Bearer $chave" } `
-           -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($corpo)) -TimeoutSec $TimeoutSec
-  } catch {
-    $msg = "$($_.Exception.Message)" -replace [regex]::Escape($chave), '***'
-    return @{ Obj = $null; Custo = $null; Erro = "falha HTTP: $(Cortar $msg 200)"; Modelo = $modelo }
+    while ($true) {
+      $tentativa++
+      try {
+        $r = Invoke-RestMethod -Method Post -Uri $OpenAIUrl -Headers @{ Authorization = "Bearer $chave" } `
+               -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($corpo)) -TimeoutSec $TimeoutSec
+        break
+      } catch {
+        $resp = $_.Exception.PSObject.Properties['Response']; $resp = if ($resp) { $resp.Value } else { $null }
+        $cod = if ($resp) { [int]$resp.StatusCode } else { 0 }
+        $msg = "$($_.Exception.Message)" -replace [regex]::Escape($chave), '***'
+        if ($cod -eq 429 -and $tentativa -lt 3) {
+          $espera = 20; try { $ra = $resp.Headers.RetryAfter.Delta; if ($ra) { $espera = [math]::Min(60, [math]::Ceiling($ra.TotalSeconds)) } } catch { }
+          Start-Sleep -Seconds $espera; continue
+        }
+        $custoErro = if ($cod -gt 0) { 0.0 } else { $null }
+        return @{ Obj = $null; Custo = $custoErro; Erro = "falha HTTP $cod (tentativa $tentativa): $(Cortar $msg 160)"; Modelo = $modelo }
+      }
+    }
   } finally { $chave = $null }
   $modelo = "openai $(Prop $r 'model')"
   $custo = $null
