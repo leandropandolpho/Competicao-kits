@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $stdin = if ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() } else { '' }
 $n = 1; $cf = Join-Path $dir 'chamadas.txt'; if (Test-Path $cf) { $n = [int](Get-Content $cf -Raw) + 1 }; Set-Content $cf $n -NoNewline
 [ordered]@{ args = @($args); cwd = (Get-Location).Path; cwd_itens = @(Get-ChildItem -Force).Count
-  stdin_tem_marcador = $stdin.Contains('relato_do_executor_NAO_CONFIAVEL'); stdin_tem_injecao = $stdin.Contains('IGNORE AS REGRAS'); fechamentos = ([regex]::Matches($stdin, '>>>')).Count
+  stdin_tem_marcador = $stdin.Contains('relato_do_executor_NAO_CONFIAVEL'); stdin_tem_injecao = $stdin.Contains('IGNORE AS REGRAS'); fechamentos = ([regex]::Matches($stdin, '>>>')).Count; tem_teste = $stdin.Contains('"passou"'); tem_arquivo = $stdin.Contains('function Soma')
   tem_api_key = [bool]$env:ANTHROPIC_API_KEY } | ConvertTo-Json | Set-Content (Join-Path $dir "args-$n.json")
 function Responder($obj, [double]$custo = 0.01, [bool]$erro = $false) {
   [ordered]@{ type = 'result'; subtype = 'success'; is_error = $erro; result = ''; structured_output = $obj; total_cost_usd = $custo; model = 'mock' } | ConvertTo-Json -Depth 6 -Compress
