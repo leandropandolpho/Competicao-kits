@@ -32,12 +32,17 @@ Set-StrictMode -Version 3.0
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
 $Sup = Join-Path $PSScriptRoot 'supervisora.ps1'
-# F5-01: saída fora do repositório.
+# F5-01/F5-01-R: saída fora do repositório, sem links/junctions no caminho nem dentro dela.
+. (Join-Path $PSScriptRoot 'caminhos.ps1')
 $RepoRaiz = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $RepoPath).ProviderPath).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-if (([IO.Path]::GetFullPath($SaidaDir).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar).StartsWith($RepoRaiz, [StringComparison]::OrdinalIgnoreCase)) {
-  [Console]::Error.WriteLine("SaidaDir dentro do repositório é proibido: $SaidaDir"); exit 4 }
+$rr = Primeiro-Redirecionamento $RepoPath
+if ($rr) { [Console]::Error.WriteLine("RepoPath passa por link/junction: $rr"); exit 4 }
+$m = Validar-Saida $SaidaDir $RepoRaiz
+if ($m) { [Console]::Error.WriteLine($m); exit 4 }
 New-Item -ItemType Directory -Force -Path $SaidaDir | Out-Null
 $SaidaDir = (Resolve-Path -LiteralPath $SaidaDir).ProviderPath
+$m = Validar-Saida $SaidaDir $RepoRaiz
+if ($m) { [Console]::Error.WriteLine($m); exit 4 }
 $ArqCusto = Join-Path $SaidaDir 'custo-combinado.json'
 
 function Prop($o, [string]$n) { if ($null -ne $o -and $o.PSObject.Properties[$n]) { $o.$n } else { $null } }

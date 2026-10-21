@@ -31,6 +31,13 @@ function Novo-Caso([string]$status, [bool]$semAlteracao, [bool]$alterarTesteDepo
   return @{ Base = $b; Repo = $repo; Estado = $est; Tarefas = (Join-Path $b 'TAREFAS.json'); Mock = (Join-Path $b 'mock') }
 }
 
+
+function Novo-LinkPasta([string]$link, [string]$alvo) {
+  # Windows: junction (não exige administrador); Linux/macOS: link simbólico.
+  New-Item -ItemType Directory -Force $alvo | Out-Null
+  if ($IsWindows) { New-Item -ItemType Junction -Path $link -Target $alvo | Out-Null } else { New-Item -ItemType SymbolicLink -Path $link -Target $alvo | Out-Null }
+}
+
 function Lancador($c, [string]$modo) {
   if ($IsWindows) {
     $l = Join-Path $c.Base 'claude.cmd'
@@ -181,6 +188,40 @@ $c = Novo-Caso 'hold' $true; $l = Lancador $c 'liberar_alta'
 & pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'saida-sup') -ClaudeCmd $l 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (código 4), nada criado no repo, nenhuma chamada' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'saida-sup')) -and -not (git -C $c.Repo status --porcelain) -and -not (Test-Path (Join-Path $c.Mock 'chamadas.txt')) } $null
+
+"== S23 (F5-04-R) pasta intermediária é link/junction para fora do repo"
+$c = Novo-Caso 'failed' $false $false 'Tentei.' 'Use lib/util.ps1 e src/calc.ps1.'
+$fora = Join-Path $c.Base 'externo'; Novo-LinkPasta (Join-Path $c.Repo 'lib') $fora
+Set-Content (Join-Path $fora 'util.ps1') 'CONTEUDO-EXTERNO-VIA-LINK'
+$r = Rodar $c 'escalar'
+Checar 'conteúdo via pasta-link NÃO entra; o arquivo comum entra' { param($r) $d = Get-Content (Join-Path $c.Mock 'stdin-1.txt') -Raw; (-not $d.Contains('CONTEUDO-EXTERNO')) -and $d.Contains('function Soma') } $r
+
+function Rodar-Saida($c, [string]$saida) {
+  $l = Lancador $c 'liberar_alta'
+  & pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida -ClaudeCmd $l 2>&1 | Out-Null
+  return $LASTEXITCODE
+}
+"== S24 (F5-01-R) SaidaDir é link/junction externo apontando para dentro do repo"
+$c = Novo-Caso 'hold' $true; $alvo = Join-Path $c.Repo 'alvo'
+Novo-LinkPasta (Join-Path $c.Base 'saida-link') $alvo
+$cod = Rodar-Saida $c (Join-Path $c.Base 'saida-link')
+Checar 'recusado (4), nada gravado no repo, nenhuma chamada' { param($r) $cod -eq 4 -and -not @(Get-ChildItem $alvo -Force).Count -and -not (Test-Path (Join-Path $c.Mock 'chamadas.txt')) } $null
+
+"== S25 (F5-01-R) pasta-mãe do SaidaDir é link/junction"
+$c = Novo-Caso 'hold' $true; $alvo = Join-Path $c.Repo 'alvo2'
+Novo-LinkPasta (Join-Path $c.Base 'mae-link') $alvo
+$cod = Rodar-Saida $c (Join-Path $c.Base 'mae-link/saida')
+Checar 'recusado (4), nada criado no repo' { param($r) $cod -eq 4 -and -not @(Get-ChildItem $alvo -Force).Count } $null
+
+"== S26 (F5-01-R) SaidaDir já contém um link/junction"
+$c = Novo-Caso 'hold' $true; $sd = Join-Path $c.Base 'saida-com-link'; New-Item -ItemType Directory -Force $sd | Out-Null
+Novo-LinkPasta (Join-Path $sd 'atalho') (Join-Path $c.Repo 'alvo3')
+$cod = Rodar-Saida $c $sd
+Checar 'recusado (4), nada gravado' { param($r) $cod -eq 4 -and -not (Test-Path (Join-Path $sd 'recomendacoes.jsonl')) -and -not @(Get-ChildItem (Join-Path $c.Repo 'alvo3') -Force).Count } $null
+
+"== S27 caminho comum continua funcionando"
+$c = Novo-Caso 'hold' $true; $cod = Rodar-Saida $c (Join-Path $c.Base 'saida-normal')
+Checar 'aceito (0) e recomendação gravada' { param($r) $cod -eq 0 -and (Test-Path (Join-Path $c.Base 'saida-normal/recomendacoes.jsonl')) } $null
 
 "TOTAL SUPERVISORA: $($total - $falhas) / $total"
 exit $(if ($falhas) { 1 } else { 0 })

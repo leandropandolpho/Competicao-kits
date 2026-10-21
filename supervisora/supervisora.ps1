@@ -41,13 +41,18 @@ $VersaoDossie = 'sup-1'
 $Repo   = (Resolve-Path -LiteralPath $RepoPath).ProviderPath
 $Estado = (Resolve-Path -LiteralPath $EstadoDir).ProviderPath
 $RepoRaiz = [IO.Path]::GetFullPath($Repo).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+. (Join-Path $PSScriptRoot 'caminhos.ps1')
+# F5-01/F5-01-R: o repositório não pode passar por link/junction (as comparações perderiam sentido),
+# e nada da supervisora pode ir para dentro dele, nem por caminho direto nem por redirecionamento.
+$rr = Primeiro-Redirecionamento $Repo
+if ($rr) { [Console]::Error.WriteLine("RepoPath passa por link/junction: $rr"); exit 4 }
 if (-not $SaidaDir) { $SaidaDir = Join-Path $Estado 'supervisora' }
-# F5-01: nada da supervisora pode ser gravado dentro do repositório (checado ANTES de criar a pasta).
-function Dentro-Do-Repo([string]$p) { $f = [IO.Path]::GetFullPath($p).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar; return $f.StartsWith($RepoRaiz, [StringComparison]::OrdinalIgnoreCase) }
-if (Dentro-Do-Repo $SaidaDir) { [Console]::Error.WriteLine("SaidaDir dentro do repositório é proibido: $SaidaDir"); exit 4 }
+$m = Validar-Saida $SaidaDir $RepoRaiz
+if ($m) { [Console]::Error.WriteLine($m); exit 4 }
 New-Item -ItemType Directory -Force -Path $SaidaDir | Out-Null
 $SaidaDir = (Resolve-Path -LiteralPath $SaidaDir).ProviderPath
-if (Dentro-Do-Repo $SaidaDir) { [Console]::Error.WriteLine("SaidaDir resolve para dentro do repositório: $SaidaDir"); exit 4 }
+$m = Validar-Saida $SaidaDir $RepoRaiz
+if ($m) { [Console]::Error.WriteLine($m); exit 4 }
 $ArqRecs  = Join-Path $SaidaDir 'recomendacoes.jsonl'
 $ArqCusto = Join-Path $SaidaDir 'supervisora-estado.json'
 
@@ -161,8 +166,9 @@ function Montar-Dossie($tarefa, $estadoJson, $eventos, [string[]]$notifs) {
     $rel = $m.Value.Replace('\', '/')
     $abs = [IO.Path]::GetFullPath((Join-Path $Repo $rel))
     $dentro = $abs.StartsWith($RepoRaiz, [StringComparison]::OrdinalIgnoreCase) -and $rel -notmatch '(^|/)\.\.(/|$)'
-    $item = if ($dentro -and (Test-Path -LiteralPath $abs -PathType Leaf)) { Get-Item -LiteralPath $abs -Force } else { $null }
-    if ($item -and -not $item.LinkType -and $citados.Count -lt 5 -and -not $citados.Contains($rel)) {
+    # F5-04-R: nenhum componente do caminho (arquivo ou pastas intermediárias) pode ser link/junction.
+    $item = if ($dentro -and (Test-Path -LiteralPath $abs -PathType Leaf) -and -not (Primeiro-Redirecionamento $abs)) { Get-Item -LiteralPath $abs -Force } else { $null }
+    if ($item -and $citados.Count -lt 5 -and -not $citados.Contains($rel)) {
       $citados[$rel] = Cortar (Get-Content -LiteralPath $abs -Raw -Encoding utf8) 3000
     }
   }
