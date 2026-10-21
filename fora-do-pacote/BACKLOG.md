@@ -64,3 +64,7 @@
 
 ### B-09 · Fixtures de teste no Windows: final de linha
 - Um `git clone` do repo do piloto gerou hash diferente do arquivo de teste (CRLF/LF), e a supervisora aplicou R1 (corretamente). Fixtures futuras devem copiar os bytes, não clonar.
+
+### F5-01 a F5-05 · Achados da auditoria estática do ChatGPT (Ato 063) — RESOLVIDOS (Ato 064)
+- Correções em `hibrido@aa83c26`, com testes negativos (S19–S22, K9–K10) e regressão real (`evidencias-fase5/015`). Detalhes em `evidencias-fase5/LEIA-ME.md`.
+- Pendente: nova auditoria dos pontos corrigidos (ChatGPT) para liberar a integração operacional da supervisora combinada.

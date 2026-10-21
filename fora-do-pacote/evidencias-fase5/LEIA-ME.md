@@ -29,3 +29,16 @@ Custo da B registrado como desconhecido (US$ 0,50 por chamada pelo teto) até os
 
 Testes simulados: `testar-combinada.ps1` 14/14; `testar-supervisora.ps1` 31/31.
 Custo exibido inclui US$ 0,50 por chamada da B (custo desconhecido, contado pelo teto); o gasto real da OpenAI fica em platform.openai.com → Usage.
+
+## Correções F5-01 a F5-05 (auditoria do Ato 063) — Ato 064
+
+| Achado | Correção | Teste negativo |
+|---|---|---|
+| F5-01 SaidaDir dentro do repo | Recusado com código 4 antes de criar qualquer pasta (supervisora e combinada) | S22, K10 |
+| F5-02 SEM_ALTERACAO histórico | Só vale para o HOLD atual: última notificação de HOLD diz SEM_ALTERACAO **e** há evento `sem_alteracao` da tentativa atual | S19, S20 |
+| F5-03 marca de desempate | Toda liberação pelo voto de Minerva recebe `liberar_por_desempate` | K9 |
+| F5-04 caminho `../` | Caminho canônico dentro do repo, sem `..` e sem links | S21 |
+| F5-05 manifesto autorreferente | `SHA256SUMS.txt` agora lista só os outros arquivos, com caminhos relativos a esta pasta; a integridade do próprio manifesto é o commit Git | `sha256sum -c SHA256SUMS.txt` |
+
+Código: `hibrido@aa83c26` (`supervisora.ps1` `1179be05…19228`; `supervisao-combinada.ps1` `d39a7c49…cd12b`). Testes: 35/35 e 16/16; mutantes das quatro correções detectados.
+`015-relatorio.txt`: regressão real com A e B — mesmas decisões finais de D1–D7; D1/D2 reais seguem pelo caminho da LLM (a classificação SEM_ALTERACAO funciona com o log real do controlador). No D7, desta vez A e B já concordaram na avaliação independente (variação normal entre execuções).
