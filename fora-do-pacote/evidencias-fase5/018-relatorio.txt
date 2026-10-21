@@ -1,0 +1,46 @@
+=== INICIO 2026-10-21T16:03:30 | piloto
+commit: 6b45dea1d11f092179230bf6df6771f6b00dd934
+5BFD026651530270 caminhos.ps1
+042FEC7FFFD3E749 supervisao-combinada.ps1
+79A7F3EB5F439E9F supervisora.ps1
+== S1 hold SEM_ALTERACAO, LLM escala
+== S2 hold SEM_ALTERACAO, LLM libera com confiança alta
+== S3 liberar com confiança média
+== S4 failed, LLM tenta liberar
+== S5 failed, LLM replaneja
+== S6 replanejar sem prompt
+== S7 hold R1 (arquivo apagado), LLM liberaria
+== S8 SEM_ALTERACAO mas teste alterado depois (hash diverge)
+== S9 decisão fora do enum
+== S10 saída não-JSON
+== S11 is_error
+== S12 recusa sem structured_output
+== S13 timeout
+== S14 teto total de custo
+== S15 injeção no relato do executor
+== S16 provedor openai sem chave
+== S17 provedor openai com servidor indisponível (chave falsa, URL local fechada)
+== S18 eventos sem campo tarefa (teste) entram no dossiê; arquivos citados no pedido também
+== S19 (F5-02) histórico: tentativa 1 SEM_ALTERACAO, tentativa 2 HOLD crítico
+== S20 (F5-02) evento sem_alteracao de tentativa antiga, mas notificação atual não é SEM_ALTERACAO
+== S21 (F5-04) pedido cita arquivo fora do repositório (../)
+== S22 (F5-01) SaidaDir dentro do repositório
+== S23 (F5-04-R) pasta intermediária é link/junction para fora do repo
+== S24 (F5-01-R) SaidaDir é link/junction externo apontando para dentro do repo
+== S25 (F5-01-R) pasta-mãe do SaidaDir é link/junction
+== S26 (F5-01-R) SaidaDir já contém um link/junction
+== S27 caminho comum continua funcionando
+TOTAL SUPERVISORA: 40 / 40
+== K1 A e B concordam (escalar)
+== K2 divergem e convergem na troca
+== K3 divergem após troca; árbitro decide com confiança alta (escalar)
+== K4 árbitro libera contra B
+== K5 árbitro em dúvida (confiança média)
+== K6 gatilho R1
+== K7 B falha (saída não-JSON)
+== K8 liberar de A invalidado (confiança média) não vira voto
+== K9 (F5-03) A contra, B a favor, árbitro libera
+== K10 (F5-01) SaidaDir dentro do repositório
+== K11 (F5-01-R) SaidaDir da combinada é link/junction para dentro do repo
+TOTAL COMBINADA: 17 / 17
+=== FIM 2026-10-21T16:07:27

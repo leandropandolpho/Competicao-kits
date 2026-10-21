@@ -42,3 +42,18 @@ Custo exibido inclui US$ 0,50 por chamada da B (custo desconhecido, contado pelo
 
 Código: `hibrido@aa83c26` (`supervisora.ps1` `1179be05…19228`; `supervisao-combinada.ps1` `d39a7c49…cd12b`). Testes: 35/35 e 16/16; mutantes das quatro correções detectados.
 `015-relatorio.txt`: regressão real com A e B — mesmas decisões finais de D1–D7; D1/D2 reais seguem pelo caminho da LLM (a classificação SEM_ALTERACAO funciona com o log real do controlador). No D7, desta vez A e B já concordaram na avaliação independente (variação normal entre execuções).
+
+## F5-01-R e F5-04-R (reauditoria do Ato 065) — Ato 066
+
+Correção: `supervisora/caminhos.ps1` faz verificação **física** (não só textual) de links simbólicos e junctions:
+- caminho do repositório sem link/junction em nenhum nível (senão, recusa);
+- pasta de saída: fora do repo, sem link/junction no caminho (inclusive pastas-mãe) e sem link/junction dentro dela — verificado antes e depois de criar;
+- arquivos citados no pedido: nenhum componente (arquivo ou pasta intermediária) pode ser link/junction.
+
+| Arquivo | Código | Resultado |
+|---|---|---|
+| `016-relatorio.txt` | `hibrido@e31e02f` | Windows: testes de junction (S23–S27, K11) **todos aprovados**; S1 e K3 falharam por defeito do **simulado** (launcher `.cmd` cortava argumentos na 1ª quebra de linha). Regressão real: decisões seguras; D3 escalou (variação da LLM, lado conservador); **D7 resolvido pelo voto de Minerva real** (escalar, confiança alta). |
+| `017-relatorio.txt` | `hibrido@cda2b96` (produção: `supervisora.ps1` `79a7f3eb…`, `supervisao-combinada.ps1` `042fec7f…`, `caminhos.ps1` `5bfd0266…`) | S1/K3 corrigidos; 5 testes de chamada direta falharam por outro defeito do teste (pwsh -File lia `-NoProfile|…` como parâmetro). **Regressão real 7/7** conforme esperado (D7 por consenso após troca). |
+| `018-relatorio.txt` | `hibrido@6b45dea` (mesmos hashes de produção da 017) | **Windows: 40/40 e 17/17.** |
+
+Mutantes das três verificações novas (citados, caminho da saída, conteúdo da saída): todos detectados (Linux).
