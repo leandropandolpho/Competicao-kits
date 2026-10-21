@@ -112,13 +112,14 @@ public static class B05Job {
   [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr h);
   public static System.Collections.Generic.HashSet<uint> Rastreados = new System.Collections.Generic.HashSet<uint>();
   public static System.Collections.Generic.List<string> Erros = new System.Collections.Generic.List<string>();
+  public static System.Collections.Generic.Dictionary<uint, string> Nomes = new System.Collections.Generic.Dictionary<uint, string>();
   public static int Varrer(IntPtr job) {
     IntPtr snap = CreateToolhelp32Snapshot(2, 0); if (snap == (IntPtr)(-1)) { Erros.Add("snapshot " + Marshal.GetLastWin32Error()); return -1; }
     int n = 0;
     try {
       var lista = new System.Collections.Generic.List<uint[]>();
       PE32 e = new PE32(); e.dwSize = (uint)Marshal.SizeOf(typeof(PE32));
-      if (Process32FirstW(snap, ref e)) { do { lista.Add(new uint[] { e.th32ProcessID, e.th32ParentProcessID }); e.dwSize = (uint)Marshal.SizeOf(typeof(PE32)); } while (Process32NextW(snap, ref e)); }
+      if (Process32FirstW(snap, ref e)) { do { lista.Add(new uint[] { e.th32ProcessID, e.th32ParentProcessID }); Nomes[e.th32ProcessID] = e.szExeFile; e.dwSize = (uint)Marshal.SizeOf(typeof(PE32)); } while (Process32NextW(snap, ref e)); }
       bool mudou = true;
       while (mudou) {
         mudou = false;
@@ -126,9 +127,9 @@ public static class B05Job {
           if (Rastreados.Contains(pp[0]) || !Rastreados.Contains(pp[1])) continue;
           Rastreados.Add(pp[0]); mudou = true;
           IntPtr h = OpenProcess(0x0101, false, pp[0]);   // SET_QUOTA | TERMINATE
-          if (h == IntPtr.Zero) { Erros.Add("open " + pp[0] + " " + Marshal.GetLastWin32Error()); continue; }
+          if (h == IntPtr.Zero) { Erros.Add("open " + pp[0] + " " + Nomes[pp[0]] + " (filho de " + pp[1] + ") erro " + Marshal.GetLastWin32Error()); continue; }
           bool dentro; IsProcessInJob(h, job, out dentro);
-          if (!dentro) { if (AssignProcessToJobObject(job, h)) n++; else Erros.Add("assign " + pp[0] + " " + Marshal.GetLastWin32Error()); }
+          if (!dentro) { if (AssignProcessToJobObject(job, h)) n++; else Erros.Add("assign " + pp[0] + " " + Nomes[pp[0]] + " (filho de " + pp[1] + ") erro " + Marshal.GetLastWin32Error()); }
           CloseHandle(h);
         }
       }

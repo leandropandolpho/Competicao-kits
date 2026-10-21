@@ -24,20 +24,20 @@ function Novo-Ambiente([int]$nTarefas = 1) {
   return @{ Base = $b; Repo = $repo; Estado = "$b\estado"; Razao = "$b\razao"; Fake = "$b\fake"; Tarefas = "$b\TAREFAS.json" }
 }
 
-function Args-Lancador($a, [double]$orc, [string[]]$extra = @()) {
+function Args-Lancador($a, [double]$orc, [string[]]$extra = @(), [int]$tent = 1) {
   return @('-NoProfile', '-File', $Lanc, '-RepoPath', $a.Repo, '-TarefasPath', $a.Tarefas, '-EstadoDir', $a.Estado, '-RazaoDir', $a.Razao,
            '-ControladorPath', $ControladorPath, '-TestCmd', 'pwsh -NoProfile -File testes/teste-ok.ps1', '-TestPaths', 'testes/*',
-           '-OrcamentoUsd', "$orc", '-TetoChamadaUsd', '0.5', '-Folga', '0.25', '-MaxTentativas', '1', '-TimeoutSec', '120',
+           '-OrcamentoUsd', "$orc", '-TetoChamadaUsd', '0.5', '-Folga', '0.25', '-MaxTentativas', "$tent", '-TimeoutSec', '120',
            '-Executor', $Pw, "-ExecutorPrefixo:-NoProfile|-File|$Fake", '-IgnorarVersao') + $extra
 }
-function Rodar-Lancador($a, [double]$orc, [string]$modo, [string[]]$extra = @()) {
+function Rodar-Lancador($a, [double]$orc, [string]$modo, [string[]]$extra = @(), [int]$tent = 1) {
   $env:B05FAKE_MODO = $modo; $env:B05FAKE_DIR = $a.Fake
-  $saida = & $Pw @(Args-Lancador $a $orc $extra) 2>&1
+  $saida = & $Pw @(Args-Lancador $a $orc $extra $tent) 2>&1
   return @{ Codigo = $LASTEXITCODE; Saida = ($saida -join ' ') }
 }
-function Iniciar-Lancador($a, [double]$orc, [string]$modo) {
+function Iniciar-Lancador($a, [double]$orc, [string]$modo, [int]$tent = 1) {
   $env:B05FAKE_MODO = $modo; $env:B05FAKE_DIR = $a.Fake
-  $psi = [System.Diagnostics.ProcessStartInfo]::new($Pw); foreach ($x in (Args-Lancador $a $orc)) { $psi.ArgumentList.Add($x) }
+  $psi = [System.Diagnostics.ProcessStartInfo]::new($Pw); foreach ($x in (Args-Lancador $a $orc @() $tent)) { $psi.ArgumentList.Add($x) }
   $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
   return [System.Diagnostics.Process]::Start($psi)
 }
@@ -101,7 +101,7 @@ Stop-Process -Id $viz.Id -Force -ErrorAction SilentlyContinue
 
 "== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)"
 $a = Novo-Ambiente 1
-$l1 = Iniciar-Lancador $a 3 'dorme:90'
+$l1 = Iniciar-Lancador $a 3 'dorme:90' 2   # 2 tentativas: a retomada (N6) usa a segunda
 $lim = (Get-Date).AddSeconds(40); $pidEx = $null
 while ((Get-Date) -lt $lim -and -not $pidEx) { Start-Sleep 1; $e = @((Razao-Ler $a.Razao).Eventos | Where-Object evento -eq 'pid'); if ($e.Count) { $pidEx = $e[-1] } }
 Start-Sleep 2
@@ -118,7 +118,7 @@ Checar 'N1: nenhum erro de associação ao job registrado' (-not @((Razao-Ler $a
 Checar 'N1: tarefa ficou in_progress para a retomada' ((Status $a) -eq 'T1=in_progress') (Status $a)
 $cont = Razao-Contabilizar (Razao-Ler $a.Razao).Eventos 0.25
 Checar 'N2: chamada derrubada reservada (0.625), não zero' ([math]::Abs($cont.Reservado - 0.625) -lt 1e-6 -and $cont.Abertas.Count -eq 1) "reservado $($cont.Reservado)"
-$r = Rodar-Lancador $a 3 'ok:0.30'
+$r = Rodar-Lancador $a 3 'ok:0.30' @() 2
 $cont = Razao-Contabilizar (Razao-Ler $a.Razao).Eventos 0.25
 Checar 'N6: retomada concluiu T1 (0)' ($r.Codigo -eq 0 -and (Status $a) -eq 'T1=done') "código $($r.Codigo) $(Status $a) $($r.Saida)"
 Checar 'N6: total = 0.625 (derrubada) + 0.30 (nova)' ([math]::Abs($cont.Total - 0.925) -lt 1e-6) "total $($cont.Total)"
