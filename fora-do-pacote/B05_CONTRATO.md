@@ -1,5 +1,5 @@
 # Contrato da candidata B-05 — custo de chamada interrompida, processos órfãos e retomada
-**Ato 070 · 21/10/2026 · Autor: Claude (Auditor Base) · Situação: PROPOSTA, aguardando aprovação do contrato (Ato 069 do ChatGPT exigiu contrato antes da implementação)**
+**v1: Ato 070 · v2: Ato 072 (emendas E1–E5 e cenários N8–N10 do Ato 071, ChatGPT) · Autor: Claude (Auditor Base) · Situação: APROVADO COM EMENDAS (Ato 071); implementação autorizada após esta versão**
 
 Base: convergência dos Atos 068 (Claude), 069 (ChatGPT) e 069 (Perplexity, mesma família do Claude): resolver o B-05 **sem alterar o controlador congelado** `7cd7864` (`ced2ec45…608e`) nem a supervisora `6b45dea`.
 
@@ -53,3 +53,35 @@ Base: convergência dos Atos 068 (Claude), 069 (ChatGPT) e 069 (Perplexity, mesm
 
 ## 6. Próximo marco (não incluído aqui)
 Piloto de autonomia limitada: tarefas não críticas, limites financeiros, alertas, intervenção humana obrigatória nas exceções, e decisão separada sobre o B-07 (proposta a discutir: o desempate nunca libera sozinho — `liberar_por_desempate` vira escalar quando não há humano).
+
+## 7. Emendas incorporadas (v2, Ato 072) — prevalecem sobre as seções anteriores em caso de conflito
+
+### E1 — Orçamento verificado e reservado antes de CADA chamada
+- O embrulho, **sob trava** (mutex nomeado por pasta do razão), reconcilia o razão e só então grava a reserva (`inicio`) da chamada. Se `gasto_contabilizado + T × (1 + folga) > orçamento`, grava `bloqueado` e **não inicia** o executor (devolve ao controlador JSON com `is_error: true` e custo 0, código 1).
+- **Fonte única do orçamento: o razão.** O lançador passa ao controlador `-MaxCustoUsd = orçamento total` (não o saldo), porque o controlador soma só custos conhecidos (`estado.json`), que nunca superam o total do razão. Assim não há dupla subtração; o limite efetivo é o do embrulho.
+- Reconciliação exigida: soma dos custos **conhecidos** no razão = `custo_acumulado_usd` do `estado.json` do controlador (tolerância 1e-6).
+
+### E2 — Compatibilidade com o `-ClaudeCmd` do controlador congelado
+- O embrulho é `claude-com-teto.cmd` → `pwsh -File claude-com-teto.ps1`. Evidência prévia: o harness congelado já usa um `claude.cmd` com o mesmo controlador no Windows (40/40). Mesmo assim, **N8** prova com o embrulho real: argumentos, stdin, JSON de saída e código de encerramento preservados. Se falhar, troca-se por executável compatível sem mudar a interface.
+
+### E3 — Job Object sem escape nem vazamento de handle
+- `CreateJobObject` sem atributos de segurança (handle **não herdável**); conferência explícita do flag de herança (`GetHandleInformation`) antes de iniciar o controlador.
+- Limites: só `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. **Proibidos** `BREAKAWAY_OK` e `SILENT_BREAKAWAY_OK`.
+- Job **sem nome** (nenhum outro processo consegue abrir o handle). Qualquer falha de criação, configuração, associação ou conferência → **não inicia** o controlador.
+- Prova de contenção: o próprio lançador consulta a lista de processos do job (`JobObjectBasicProcessIdList`) e grava no razão; **N1** exige que o `claude.exe` da chamada apareça nessa lista **antes** da queda.
+
+### E4 — Identidade de processo e durabilidade do razão
+- Cada processo registrado leva: PID, **horário de criação**, id da chamada e id da execução. P4 considera "vivo" só se o PID existir **com o mesmo horário de criação** (PID reutilizado não conta).
+- `inicio` é gravado com escrita direta (`WriteThrough` + `Flush`) **antes** de criar o executor. Falha de escrita, linha parcial ou razão ilegível → bloqueia novas chamadas (embrulho) e novas execuções (lançador).
+
+### E5 — Versão fixa e falhas antes da invocação
+- O lançador registra `claude --version` e recusa iniciar se diferente da versão fixada (`2.1.302`), que suporta `--max-budget-usd` (conferido no `--help` do 007).
+- `T × 1,25` é reserva contábil conservadora, **não** garantia de cobrança.
+- Falha comprovadamente anterior à invocação (o processo do executor nem chegou a ser criado) → `fim` com custo **0 conhecido** e motivo. Se a criação ocorreu ou não se sabe, a reserva fica.
+
+### Cenários adicionais
+| ID | Cenário | Resultado exigido |
+|---|---|---|
+| N8 | Controlador congelado invoca o embrulho real | Argumentos (+ `--max-budget-usd`), stdin, JSON e código de saída preservados |
+| N9 | Várias chamadas na mesma execução esgotam o orçamento | A próxima é bloqueada **antes** de iniciar; sem dupla cobrança; razão × `estado.json` reconciliados |
+| N10 | Falha de associação ao Job Object ou handle herdável | Falha segura: o controlador não inicia |
