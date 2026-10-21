@@ -90,6 +90,17 @@ public static class B05Job {
   [DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetHandleInformation(IntPtr h, out uint flags);
   [DllImport("kernel32.dll", SetLastError = true)] public static extern bool SetHandleInformation(IntPtr h, uint mask, uint flags);
   [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+  // Configuração e leitura feitas em C#: em PowerShell, $info.Basic devolve CÓPIA da struct aninhada
+  // (alterar LimitFlags por ali não muda nada — foi o que a verificação do 022 pegou: flags 0x0).
+  public static bool Configurar(IntPtr job, uint flags) {
+    EXT info = new EXT(); info.Basic.LimitFlags = flags;
+    return SetInformationJobObject(job, 9, ref info, (uint)Marshal.SizeOf(typeof(EXT)));
+  }
+  public static long Flags(IntPtr job) {
+    EXT info = new EXT();
+    if (!QueryInformationJobObject(job, 9, ref info, (uint)Marshal.SizeOf(typeof(EXT)), IntPtr.Zero)) return -1;
+    return info.Basic.LimitFlags;
+  }
   public static uint[] Membros(IntPtr job) {
     int cap = 256; int size = 8 + cap * IntPtr.Size; IntPtr buf = Marshal.AllocHGlobal(size);
     try {
@@ -103,12 +114,10 @@ public static class B05Job {
 '@
 $job = [B05Job]::CreateJobObject([IntPtr]::Zero, $null)   # sem nome e sem atributos: handle não herdável
 if ($job -eq [IntPtr]::Zero) { Parar 24 "CreateJobObject falhou ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" }
-$info = [B05Job+EXT]::new(); $info.Basic.LimitFlags = [B05Job]::KILL_ON_JOB_CLOSE
-if (-not [B05Job]::SetInformationJobObject($job, 9, [ref]$info, [uint32][Runtime.InteropServices.Marshal]::SizeOf([type][B05Job+EXT]))) { Parar 24 "SetInformationJobObject falhou ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" }
+if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { Parar 24 "SetInformationJobObject falhou ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" }
 # Confere os limites efetivos: KILL_ON_JOB_CLOSE ligado; breakaway proibido.
-$conf = [B05Job+EXT]::new()
-if (-not [B05Job]::QueryInformationJobObject($job, 9, [ref]$conf, [uint32][Runtime.InteropServices.Marshal]::SizeOf([type][B05Job+EXT]), [IntPtr]::Zero)) { Parar 24 'QueryInformationJobObject falhou' }
-$fl = $conf.Basic.LimitFlags
+$fl = [B05Job]::Flags($job)
+if ($fl -lt 0) { Parar 24 'QueryInformationJobObject falhou' }
 if (-not ($fl -band [B05Job]::KILL_ON_JOB_CLOSE) -or ($fl -band [B05Job]::BREAKAWAY_OK) -or ($fl -band [B05Job]::SILENT_BREAKAWAY_OK)) { Parar 24 ("limites do job inesperados: 0x{0:X}" -f $fl) }
 if ($TesteHandleHerdavel) { [B05Job]::SetHandleInformation($job, [B05Job]::HANDLE_FLAG_INHERIT, [B05Job]::HANDLE_FLAG_INHERIT) | Out-Null }
 $hf = [uint32]0
