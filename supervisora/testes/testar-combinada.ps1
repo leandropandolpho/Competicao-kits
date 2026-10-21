@@ -21,9 +21,10 @@ function Novo-Caso([string]$status, [bool]$semAlteracao, [bool]$alterarTesteDepo
     @{ ts = 't1'; evento = 'executor'; tarefa = 'X1'; tentativa = 1; resumo = $relato; custo_usd = 0.1; falhou = $false },
     @{ ts = 't2'; evento = 'teste'; passou = ($status -ne 'failed'); saida = 'PASSOU' })
   if ($semAlteracao) { $ev += @{ ts = 't3'; evento = 'sem_alteracao'; tarefa = 'X1'; tentativa = 1 } }
-  $ev += @{ ts = 't4'; evento = 'status_tarefa'; tarefa = 'X1'; status = $status }
-  ($ev | ForEach-Object { $_ | ConvertTo-Json -Compress }) | Set-Content (Join-Path $est 'log.jsonl')
   $msg = if ($status -eq 'failed') { 'Tarefa X1 falhou após 1 tentativa(s).' } elseif ($semAlteracao) { 'HOLD na tarefa X1: SEM_ALTERACAO — o executor terminou sem alterar nenhum arquivo.' } else { 'HOLD na tarefa X1: arquivo rastreado removido: src/extra.ps1.' }
+  $ev += @{ ts = 't4'; evento = 'status_tarefa'; tarefa = 'X1'; status = $status }
+  $ev += @{ ts = 't5'; evento = 'notificacao'; mensagem = $msg }
+  ($ev | ForEach-Object { $_ | ConvertTo-Json -Compress }) | Set-Content (Join-Path $est 'log.jsonl')
   Set-Content (Join-Path $est 'notificacoes.txt') "[t4] $msg"
   if ($alterarTesteDepois) { Set-Content (Join-Path $repo 'testes/teste-calc.ps1') 'exit 1' }
   return @{ Base = $b; Repo = $repo; Estado = $est; Tarefas = (Join-Path $b 'TAREFAS.json'); Mock = (Join-Path $b 'mock') }
@@ -102,6 +103,16 @@ Checar 'final escalar por falha, sem troca' { param($r) $r.Res.decisao_final -eq
 "== K8 liberar de A invalidado (confiança média) não vira voto"
 $c = Novo-Caso 'hold' $true; $r = Combinar $c 'liberar_media' 'liberar_alta'
 Checar 'final escalar' { param($r) $r.Res.decisao_final -eq 'escalar' } $r
+
+"== K9 (F5-03) A contra, B a favor, árbitro libera"
+$c = Novo-Caso 'hold' $true; $r = Combinar $c 'escalar' 'liberar_alta' 'liberar_alta'
+Checar 'final liberar, marcado liberar_por_desempate' { param($r) $r.Res.decisao_final -eq 'liberar' -and $r.Res.via -eq 'voto_de_minerva' -and $r.Res.marca -eq 'liberar_por_desempate' } $r
+
+"== K10 (F5-01) SaidaDir dentro do repositório"
+$c = Novo-Caso 'hold' $true; $A = LancadorEm $c 'A' 'escalar'
+& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'comb') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -ProvedorB claude 2>&1 | Out-Null
+$codigo = $LASTEXITCODE
+Checar 'recusado (código 4), nada criado no repo' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'comb')) -and -not (git -C $c.Repo status --porcelain) } $null
 
 "TOTAL COMBINADA: $($total - $falhas) / $total"
 exit $(if ($falhas) { 1 } else { 0 })

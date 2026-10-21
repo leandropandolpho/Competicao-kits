@@ -40,9 +40,14 @@ $VersaoDossie = 'sup-1'
 
 $Repo   = (Resolve-Path -LiteralPath $RepoPath).ProviderPath
 $Estado = (Resolve-Path -LiteralPath $EstadoDir).ProviderPath
+$RepoRaiz = [IO.Path]::GetFullPath($Repo).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 if (-not $SaidaDir) { $SaidaDir = Join-Path $Estado 'supervisora' }
+# F5-01: nada da supervisora pode ser gravado dentro do repositório (checado ANTES de criar a pasta).
+function Dentro-Do-Repo([string]$p) { $f = [IO.Path]::GetFullPath($p).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar; return $f.StartsWith($RepoRaiz, [StringComparison]::OrdinalIgnoreCase) }
+if (Dentro-Do-Repo $SaidaDir) { [Console]::Error.WriteLine("SaidaDir dentro do repositório é proibido: $SaidaDir"); exit 4 }
 New-Item -ItemType Directory -Force -Path $SaidaDir | Out-Null
 $SaidaDir = (Resolve-Path -LiteralPath $SaidaDir).ProviderPath
+if (Dentro-Do-Repo $SaidaDir) { [Console]::Error.WriteLine("SaidaDir resolve para dentro do repositório: $SaidaDir"); exit 4 }
 $ArqRecs  = Join-Path $SaidaDir 'recomendacoes.jsonl'
 $ArqCusto = Join-Path $SaidaDir 'supervisora-estado.json'
 
@@ -123,9 +128,22 @@ function Montar-Dossie($tarefa, $estadoJson, $eventos, [string[]]$notifs) {
   $id = "$($tarefa.id)"
   # Janela da tarefa: do primeiro ao último evento que a cita, INCLUINDO os eventos sem campo "tarefa"
   # (teste, rollback, commit…), que o controlador grava sem identificar a tarefa.
+  # A janela vai até o próximo evento de OUTRA tarefa (ou o fim): a notificação do hold vem depois
+  # do último evento marcado com esta tarefa.
   $idx = @(for ($i = 0; $i -lt $eventos.Count; $i++) { if ((Prop $eventos[$i] 'tarefa') -eq $id) { $i } })
-  $evTarefa = if ($idx.Count) { @($eventos[$idx[0]..$idx[-1]] | Where-Object { -not (Prop $_ 'tarefa') -or (Prop $_ 'tarefa') -eq $id }) } else { @() }
-  $semAlteracao = [bool](@($evTarefa | Where-Object { $_.evento -eq 'sem_alteracao' }).Count)
+  $evTarefa = @()
+  if ($idx.Count) {
+    $fimJ = $eventos.Count - 1
+    for ($j = $idx[-1] + 1; $j -lt $eventos.Count; $j++) { $tj = Prop $eventos[$j] 'tarefa'; if ($tj -and $tj -ne $id) { $fimJ = $j - 1; break } }
+    $evTarefa = @($eventos[$idx[0]..$fimJ] | Where-Object { -not (Prop $_ 'tarefa') -or (Prop $_ 'tarefa') -eq $id })
+  }
+  # F5-02: SEM_ALTERACAO só vale se for a causa do HOLD ATUAL: a última notificação de HOLD desta tarefa
+  # diz SEM_ALTERACAO E existe evento sem_alteracao da tentativa atual. Histórico antigo não conta.
+  $holds = @($evTarefa | Where-Object { (Prop $_ 'evento') -eq 'notificacao' -and "$(Prop $_ 'mensagem')" -match "HOLD na tarefa $([regex]::Escape($id)):" })
+  $ultimoHold = if ($holds.Count) { "$(Prop $holds[-1] 'mensagem')" } else { '' }
+  $tentAtual = "$($tarefa.tentativas)"
+  $semAltAtual = @($evTarefa | Where-Object { (Prop $_ 'evento') -eq 'sem_alteracao' -and "$(Prop $_ 'tentativa')" -eq $tentAtual }).Count -gt 0
+  $semAlteracao = ($tarefa.status -eq 'hold') -and $semAltAtual -and ($ultimoHold -match "HOLD na tarefa $([regex]::Escape($id)):\s*SEM_ALTERACAO")
   $notTarefa = @($notifs | Where-Object { $_ -match "tarefa $([regex]::Escape($id))\b" })
   $relatos = @($evTarefa | Where-Object { $_.evento -eq 'executor' } | ForEach-Object { "tentativa $(Prop $_ 'tentativa'): $(Prop $_ 'resumo')" })
   $eventosLimpos = @($evTarefa | ForEach-Object {
@@ -140,8 +158,11 @@ function Montar-Dossie($tarefa, $estadoJson, $eventos, [string[]]$notifs) {
   # Arquivos citados no pedido (lidos do disco pelo script, não pelo relato do executor).
   $citados = [ordered]@{}
   foreach ($m in [regex]::Matches("$($tarefa.prompt)", '[\w.\-]+(?:[\\/][\w.\-]+)+\.\w+')) {
-    $rel = $m.Value.Replace('\', '/'); $abs = Join-Path $Repo $rel
-    if ($citados.Count -lt 5 -and -not $citados.Contains($rel) -and (Test-Path -LiteralPath $abs -PathType Leaf)) {
+    $rel = $m.Value.Replace('\', '/')
+    $abs = [IO.Path]::GetFullPath((Join-Path $Repo $rel))
+    $dentro = $abs.StartsWith($RepoRaiz, [StringComparison]::OrdinalIgnoreCase) -and $rel -notmatch '(^|/)\.\.(/|$)'
+    $item = if ($dentro -and (Test-Path -LiteralPath $abs -PathType Leaf)) { Get-Item -LiteralPath $abs -Force } else { $null }
+    if ($item -and -not $item.LinkType -and $citados.Count -lt 5 -and -not $citados.Contains($rel)) {
       $citados[$rel] = Cortar (Get-Content -LiteralPath $abs -Raw -Encoding utf8) 3000
     }
   }

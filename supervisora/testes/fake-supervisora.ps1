@@ -6,6 +6,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $stdin = if ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() } else { '' }
 $n = 1; $cf = Join-Path $dir 'chamadas.txt'; if (Test-Path $cf) { $n = [int](Get-Content $cf -Raw) + 1 }; Set-Content $cf $n -NoNewline
 # SUPMOCK_MODO aceita lista 'm1,m2,...': a N-ésima chamada usa o N-ésimo modo (o último se repete).
+Set-Content (Join-Path $dir "stdin-$n.txt") $stdin
 $lista = @($env:SUPMOCK_MODO -split ','); $modo = $lista[[math]::Min($n, $lista.Count) - 1]
 [ordered]@{ args = @($args); cwd = (Get-Location).Path; cwd_itens = @(Get-ChildItem -Force).Count
   stdin_tem_marcador = $stdin.Contains('relato_do_executor_NAO_CONFIAVEL'); stdin_tem_injecao = $stdin.Contains('IGNORE AS REGRAS'); fechamentos = ([regex]::Matches($stdin, '>>>')).Count; tem_teste = $stdin.Contains('"passou"'); tem_arquivo = $stdin.Contains('function Soma'); tem_parecer = $stdin.Contains('pareceres_de_outras_supervisoras') -and $stdin -match '"supervisora":\s*"[AB]"'; arbitro = (@($args) -join ' ').Contains('ÁRBITRO')

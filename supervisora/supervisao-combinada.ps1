@@ -32,6 +32,10 @@ Set-StrictMode -Version 3.0
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
 $Sup = Join-Path $PSScriptRoot 'supervisora.ps1'
+# F5-01: saída fora do repositório.
+$RepoRaiz = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $RepoPath).ProviderPath).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+if (([IO.Path]::GetFullPath($SaidaDir).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar).StartsWith($RepoRaiz, [StringComparison]::OrdinalIgnoreCase)) {
+  [Console]::Error.WriteLine("SaidaDir dentro do repositório é proibido: $SaidaDir"); exit 4 }
 New-Item -ItemType Directory -Force -Path $SaidaDir | Out-Null
 $SaidaDir = (Resolve-Path -LiteralPath $SaidaDir).ProviderPath
 $ArqCusto = Join-Path $SaidaDir 'custo-combinado.json'
@@ -95,7 +99,8 @@ else {
       elseif ("$($recM.confianca)" -ne 'alta') { $final = 'escalar'; $via = 'arbitro_em_duvida' }
       else {
         $final = "$($recM.decisao)"; $via = 'voto_de_minerva'
-        if ($final -eq 'liberar' -and $recB2.decisao -ne 'liberar') { $marca = 'liberar_por_desempate' }
+        # F5-03: TODA liberação decidida pelo voto de Minerva é marcada, seja quem for que discordou.
+        if ($final -eq 'liberar') { $marca = 'liberar_por_desempate' }
       }
     }
   }

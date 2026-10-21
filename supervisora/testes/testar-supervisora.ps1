@@ -22,9 +22,10 @@ function Novo-Caso([string]$status, [bool]$semAlteracao, [bool]$alterarTesteDepo
     @{ ts = 't1'; evento = 'executor'; tarefa = 'X1'; tentativa = 1; resumo = $relato; custo_usd = 0.1; falhou = $false },
     @{ ts = 't2'; evento = 'teste'; passou = ($status -ne 'failed'); saida = 'PASSOU' })
   if ($semAlteracao) { $ev += @{ ts = 't3'; evento = 'sem_alteracao'; tarefa = 'X1'; tentativa = 1 } }
-  $ev += @{ ts = 't4'; evento = 'status_tarefa'; tarefa = 'X1'; status = $status }
-  ($ev | ForEach-Object { $_ | ConvertTo-Json -Compress }) | Set-Content (Join-Path $est 'log.jsonl')
   $msg = if ($status -eq 'failed') { 'Tarefa X1 falhou após 1 tentativa(s).' } elseif ($semAlteracao) { 'HOLD na tarefa X1: SEM_ALTERACAO — o executor terminou sem alterar nenhum arquivo.' } else { 'HOLD na tarefa X1: arquivo rastreado removido: src/extra.ps1.' }
+  $ev += @{ ts = 't4'; evento = 'status_tarefa'; tarefa = 'X1'; status = $status }
+  $ev += @{ ts = 't5'; evento = 'notificacao'; mensagem = $msg }
+  ($ev | ForEach-Object { $_ | ConvertTo-Json -Compress }) | Set-Content (Join-Path $est 'log.jsonl')
   Set-Content (Join-Path $est 'notificacoes.txt') "[t4] $msg"
   if ($alterarTesteDepois) { Set-Content (Join-Path $repo 'testes/teste-calc.ps1') 'exit 1' }
   return @{ Base = $b; Repo = $repo; Estado = $est; Tarefas = (Join-Path $b 'TAREFAS.json'); Mock = (Join-Path $b 'mock') }
@@ -153,6 +154,33 @@ $c = Novo-Caso 'failed' $false $false 'Tentei.' 'Corrija a Soma em src/calc.ps1 
 $r = Rodar $c 'escalar'
 Checar 'resultado do teste rodado pelo controlador presente' { param($r) $r.Args.tem_teste } $r
 Checar 'conteúdo de src/calc.ps1 (citado no pedido) presente' { param($r) $r.Args.tem_arquivo } $r
+
+"== S19 (F5-02) histórico: tentativa 1 SEM_ALTERACAO, tentativa 2 HOLD crítico"
+$c = Novo-Caso 'hold' $true
+$t = Get-Content $c.Tarefas -Raw | ConvertFrom-Json; $t.tarefas[0].tentativas = 2; $t | ConvertTo-Json -Depth 5 | Set-Content $c.Tarefas
+@(@{ evento = 'status_tarefa'; tarefa = 'X1'; status = 'in_progress'; tentativas = 2 }, @{ evento = 'executor'; tarefa = 'X1'; tentativa = 2; resumo = 'Removi um arquivo.' },
+  @{ evento = 'status_tarefa'; tarefa = 'X1'; status = 'hold' }, @{ evento = 'notificacao'; mensagem = 'HOLD na tarefa X1: arquivo rastreado removido: src/extra.ps1.' }) |
+  ForEach-Object { $_ | ConvertTo-Json -Compress } | Add-Content (Join-Path $c.Estado 'log.jsonl')
+$r = Rodar $c 'liberar_alta'
+Checar 'escalar por regra_R1 (o SEM_ALTERACAO antigo não conta)' { param($r) $r.Rec.decisao -eq 'escalar' -and $r.Rec.origem -eq 'regra_R1' -and $r.Chamadas -eq 0 } $r
+
+"== S20 (F5-02) evento sem_alteracao de tentativa antiga, mas notificação atual não é SEM_ALTERACAO"
+$c = Novo-Caso 'hold' $true
+@(@{ evento = 'notificacao'; mensagem = 'HOLD na tarefa X1: configuração do executor alterada: .claude/settings.json.' }) | ForEach-Object { $_ | ConvertTo-Json -Compress } | Add-Content (Join-Path $c.Estado 'log.jsonl')
+$r = Rodar $c 'liberar_alta'
+Checar 'escalar por regra_R1' { param($r) $r.Rec.origem -eq 'regra_R1' -and $r.Chamadas -eq 0 } $r
+
+"== S21 (F5-04) pedido cita arquivo fora do repositório (../)"
+$c = Novo-Caso 'failed' $false $false 'Tentei.' 'Leia ../segredo.txt e src/calc.ps1.'
+Set-Content (Join-Path $c.Base 'segredo.txt') 'CONTEUDO-SECRETO-FORA-DO-REPO'
+$r = Rodar $c 'escalar'
+Checar 'conteúdo externo NÃO entra no dossiê; o interno entra' { param($r) $d = Get-Content (Join-Path $c.Mock 'stdin-1.txt') -Raw; (-not $d.Contains('CONTEUDO-SECRETO')) -and $d.Contains('function Soma') } $r
+
+"== S22 (F5-01) SaidaDir dentro do repositório"
+$c = Novo-Caso 'hold' $true; $l = Lancador $c 'liberar_alta'
+& pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'saida-sup') -ClaudeCmd $l 2>&1 | Out-Null
+$codigo = $LASTEXITCODE
+Checar 'recusado (código 4), nada criado no repo, nenhuma chamada' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'saida-sup')) -and -not (git -C $c.Repo status --porcelain) -and -not (Test-Path (Join-Path $c.Mock 'chamadas.txt')) } $null
 
 "TOTAL SUPERVISORA: $($total - $falhas) / $total"
 exit $(if ($falhas) { 1 } else { 0 })
