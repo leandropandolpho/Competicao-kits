@@ -101,6 +101,40 @@ public static class B05Job {
     if (!QueryInformationJobObject(job, 9, ref info, (uint)Marshal.SizeOf(typeof(EXT)), IntPtr.Zero)) return -1;
     return info.Basic.LimitFlags;
   }
+  // Varredura ativa (achado do 025): no Windows desta máquina, filhos do controlador (pwsh da Microsoft Store,
+  // empacotado) NÃO herdaram o job aninhado. Por isso o lançador também associa ativamente ao job todo
+  // descendente que encontrar (pai já rastreado), a cada ~100 ms. Herança continua valendo quando funciona.
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct PE32 { public uint dwSize, cntUsage, th32ProcessID; public IntPtr th32DefaultHeapID; public uint th32ModuleID, cntThreads, th32ParentProcessID; public int pcPriClassBase; public uint dwFlags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szExeFile; }
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snap, ref PE32 e);
+  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snap, ref PE32 e);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr h);
+  public static System.Collections.Generic.HashSet<uint> Rastreados = new System.Collections.Generic.HashSet<uint>();
+  public static System.Collections.Generic.List<string> Erros = new System.Collections.Generic.List<string>();
+  public static int Varrer(IntPtr job) {
+    IntPtr snap = CreateToolhelp32Snapshot(2, 0); if (snap == (IntPtr)(-1)) { Erros.Add("snapshot " + Marshal.GetLastWin32Error()); return -1; }
+    int n = 0;
+    try {
+      var lista = new System.Collections.Generic.List<uint[]>();
+      PE32 e = new PE32(); e.dwSize = (uint)Marshal.SizeOf(typeof(PE32));
+      if (Process32FirstW(snap, ref e)) { do { lista.Add(new uint[] { e.th32ProcessID, e.th32ParentProcessID }); e.dwSize = (uint)Marshal.SizeOf(typeof(PE32)); } while (Process32NextW(snap, ref e)); }
+      bool mudou = true;
+      while (mudou) {
+        mudou = false;
+        foreach (var pp in lista) {
+          if (Rastreados.Contains(pp[0]) || !Rastreados.Contains(pp[1])) continue;
+          Rastreados.Add(pp[0]); mudou = true;
+          IntPtr h = OpenProcess(0x0101, false, pp[0]);   // SET_QUOTA | TERMINATE
+          if (h == IntPtr.Zero) { Erros.Add("open " + pp[0] + " " + Marshal.GetLastWin32Error()); continue; }
+          bool dentro; IsProcessInJob(h, job, out dentro);
+          if (!dentro) { if (AssignProcessToJobObject(job, h)) n++; else Erros.Add("assign " + pp[0] + " " + Marshal.GetLastWin32Error()); }
+          CloseHandle(h);
+        }
+      }
+    } finally { CloseHandle(snap); }
+    return n;
+  }
   public static uint[] Membros(IntPtr job) {
     int cap = 256; int size = 8 + cap * IntPtr.Size; IntPtr buf = Marshal.AllocHGlobal(size);
     try {
@@ -148,11 +182,19 @@ try { $criacaoCtl = $ctl.StartTime.ToUniversalTime().ToString('o') } catch { $cr
 Razao-Gravar $RazaoDir @{ evento = 'controlador'; id = 'ctl'; execucao = $execucao; pid = $ctl.Id; criacao = $criacaoCtl; versao_claude = "$v"; flags_job = ('0x{0:X}' -f $fl) }
 
 # P1 (prova de contenção): registra a lista de processos do job sempre que muda.
-$ultimo = ''
+[void][B05Job]::Rastreados.Add([uint32]$PID); [void][B05Job]::Rastreados.Add([uint32]$ctl.Id)
+$ultimo = ''; $tick = 0; $errosVistos = 0
 while (-not $ctl.HasExited) {
-  $m = [B05Job]::Membros($job)
-  if ($m) { $s = (@($m | Sort-Object) -join ','); if ($s -ne $ultimo) { $ultimo = $s; try { Razao-Gravar $RazaoDir @{ evento = 'membros_job'; execucao = $execucao; pids = @($m) } } catch { } } }
-  Start-Sleep -Milliseconds 500
+  [void][B05Job]::Varrer($job)                                   # associação ativa dos descendentes
+  if ([B05Job]::Erros.Count -gt $errosVistos) {
+    try { Razao-Gravar $RazaoDir @{ evento = 'erro_job'; execucao = $execucao; erros = @([B05Job]::Erros.GetRange($errosVistos, [B05Job]::Erros.Count - $errosVistos)) } } catch { }
+    $errosVistos = [B05Job]::Erros.Count
+  }
+  if (($tick++ % 5) -eq 0) {
+    $m = [B05Job]::Membros($job)
+    if ($m) { $s = (@($m | Sort-Object) -join ','); if ($s -ne $ultimo) { $ultimo = $s; try { Razao-Gravar $RazaoDir @{ evento = 'membros_job'; execucao = $execucao; pids = @($m) } } catch { } } }
+  }
+  Start-Sleep -Milliseconds 100
 }
 $ctl.WaitForExit()
 exit $ctl.ExitCode

@@ -112,8 +112,9 @@ Checar 'N5: segunda instância para o mesmo EstadoDir → código 20' ($r.Codigo
 $ctlEv = @((Razao-Ler $a.Razao).Eventos | Where-Object evento -eq 'controlador')[-1]
 Stop-Process -Id $l1.Id -Force
 Start-Sleep 5
-Checar 'N1: executor morto em ≤ 5 s (PID + criação)' (-not (Processo-Vivo ([int]$pidEx.pid) "$($pidEx.criacao)"))
-Checar 'N1: controlador morto' (-not (Processo-Vivo ([int]$ctlEv.pid) "$($ctlEv.criacao)"))
+Checar 'N1: executor morto em ≤ 5 s (PID + criação)' (-not (Processo-Vivo ([int]$pidEx.pid) $pidEx.criacao))
+Checar 'N1: controlador morto' (-not (Processo-Vivo ([int]$ctlEv.pid) $ctlEv.criacao))
+Checar 'N1: nenhum erro de associação ao job registrado' (-not @((Razao-Ler $a.Razao).Eventos | Where-Object evento -eq 'erro_job').Count)
 Checar 'N1: tarefa ficou in_progress para a retomada' ((Status $a) -eq 'T1=in_progress') (Status $a)
 $cont = Razao-Contabilizar (Razao-Ler $a.Razao).Eventos 0.25
 Checar 'N2: chamada derrubada reservada (0.625), não zero' ([math]::Abs($cont.Reservado - 0.625) -lt 1e-6 -and $cont.Abertas.Count -eq 1) "reservado $($cont.Reservado)"
