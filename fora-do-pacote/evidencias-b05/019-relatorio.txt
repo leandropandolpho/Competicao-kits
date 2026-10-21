@@ -1,0 +1,15 @@
+=== INICIO 2026-10-21T16:42:06 | piloto
+commit: 2dd532021c268380bf71550de395d39ee06621f9
+controlador (deve ser ced2ec45…): CED2EC45BE2FF840
+2F8A0901AEDEDAA4 claude-com-teto.ps1
+2E214BEE9D8627B8 lancador.ps1
+02A9A67C3E6E15A9 razao.ps1
+B683D9A80E791782 claude-com-teto.cmd
+== N7 + N8: chamada normal pelo controlador congelado
+Get-Content: C:\Users\piloto\piloto\harness\b05\testes\testar-b05.ps1:49
+Line |
+  49 |  … ventos $a; $ch = Get-Content "$($a.Fake)\chamada-1.json" -Raw | Conve …
+     |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Não é possível localizar o caminho 'C:\Users\piloto\AppData\Local\Temp\b05-e19f8ccbf9\fake\chamada-1.json'
+     | porque ele não existe.
+=== FIM 2026-10-21T16:42:20

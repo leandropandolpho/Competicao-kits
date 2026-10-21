@@ -1,0 +1,33 @@
+=== INICIO 2026-10-21T16:56:52 | piloto
+commit: 3a8cb0eaf92904147fb480c644c32e943c9d9853
+controlador (deve ser ced2ec45…): CED2EC45BE2FF840
+2F8A0901AEDEDAA4 claude-com-teto.ps1
+B0366AE3B44E1C87 lancador.ps1
+02A9A67C3E6E15A9 razao.ps1
+B683D9A80E791782 claude-com-teto.cmd
+== N7 + N8: chamada normal pelo controlador congelado
+  [ok] controlador terminou (0) e T1 done
+  [ok] razão: inicio e fim com custo 0.30
+  [ok] N8: argumentos do controlador preservados + --max-budget-usd 0.5 no fim
+  [ok] N8: stdin (prompt da tarefa) chegou ao executor
+  [ok] N8: cwd do executor é o repo
+  [ok] E1: razão (conhecido) = estado.json do controlador
+  [FALHOU] P1: membros do job registrados incluem o executor → pid 15888
+== N8: código de saída e JSON de erro preservados
+  [ok] controlador viu código 3 do executor (falhou, T1 failed)
+  [ok] razão: fim com custo 0.02 do JSON de erro
+== N9: várias chamadas esgotam o orçamento (0.30 cada; reserva 0.625; orçamento 1.60)
+  [ok] T1–T4 done, T5 failed
+  [ok] 4 inicios, 1 bloqueado, executor chamado 4 vezes
+  [ok] sem dupla cobrança: razão 1.20 = estado.json 1.20
+== N3: saldo insuficiente antes de iniciar
+  [ok] código 23, controlador não iniciou, executor não chamado
+== N10: falha de associação ao job / handle herdável
+  [ok] associação falha → código 24, controlador não iniciou
+  [ok] handle herdável → código 24, controlador não iniciou
+== N4: processo antigo vivo (PID + criação) e PID reutilizado
+  [FALHOU] processo antigo vivo → código 22 → código 1 [31;1mWhere-Object: [0mC:\Users\piloto\piloto\harness\b05\razao.ps1:67[0m [31;1m[0m[36;1mLine |[0m [31;1m[0m[36;1m[36;1m  67 | [0m … lador') } | [36;1mWhere-Object { Processo-Vivo ([int]$_.pid) "$($_.criacao)[0m …[0m [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m     | [31;1m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m     | [31;1mException calling "Parse" with "1" argument(s): "String '10/21/2026 20:57:47' was not recognized as a valid[0m [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m[31;1m[36;1m     | [31;1mDateTime."[0m
+  [ok] mesmo PID com outra criação (reutilizado) → não bloqueia
+== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)
+testar-b05.ps1: Exception calling "ReadAllText" with "2" argument(s): "The process cannot access the file 'C:\Users\piloto\AppData\Local\Temp\b05-ac9edbb655\razao\razao.jsonl' because it is being used by another process."
+=== FIM 2026-10-21T16:59:40

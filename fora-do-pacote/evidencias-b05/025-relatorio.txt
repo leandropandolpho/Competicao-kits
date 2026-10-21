@@ -1,0 +1,18 @@
+ponte (este pwsh 17904) em algum job: True
+lançador pid 36488
+36488 lancador emjob=True
+  22964 conhost.exe emjob=True :: \??\C:\WINDOWS\system32\conhost.exe 0x4
+  20104 pwsh.exe emjob=True :: "C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\pwsh.exe" -NoProfile -File C:\Us
+    17176 cmd.exe emjob=True :: C:\WINDOWS\system32\cmd.exe /c ""C:\Users\piloto\piloto\harness\b05\claude-com-teto.cmd" -p --output-format js
+      26532 pwsh.exe emjob=True :: pwsh  -NoProfile -ExecutionPolicy Bypass -File "C:\Users\piloto\piloto\harness\b05\claude-com-teto.ps1" -p --o
+        11776 pwsh.exe emjob=True :: "C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\pwsh.exe" -NoProfile -File C:\Us
+--- razão
+{"ts":"2026-10-21T17:14:05.3316166-04:00","pid":20104,"versao_claude":"ignorada (teste)","id":"ctl","flags_job":"0x2000","evento":"controlador","execucao":"fab7ead0494f47719049519eabb6b0ed","criacao":"2026-10-21T21:14:05
+{"pids":[36488,20104],"execucao":"fab7ead0494f47719049519eabb6b0ed","evento":"membros_job","ts":"2026-10-21T17:14:05.4500003-04:00"}
+{"id":"72f9c051793e401c96486b84365dbdbc","ts":"2026-10-21T17:14:07.0005133-04:00","folga":0.25,"evento":"inicio","execucao":"fab7ead0494f47719049519eabb6b0ed","teto_usd":0.5}
+{"criacao":"2026-10-21T21:14:07.1568328Z","argumentos":["-NoProfile","-File","C:\\Users\\piloto\\piloto\\harness\\b05\\testes\\fake-executor.ps1","-p","--output-format","json","--permission-mode","dontAsk","--settings","
+--- após matar o lançador, ainda vivos da árvore:
+VIVO 17176 cmd.exe
+VIVO 26532 pwsh.exe
+VIVO 11776 pwsh.exe
+--- fim

@@ -1,0 +1,65 @@
+ponte (este pwsh 9616) em algum job: True
+commit: 8fa89331f3f06de0d4dcf9e21316de20084418b0
+lançador pid 28488
+28488 lancador emjob=True
+  33920 conhost.exe emjob=True :: \??\C:\WINDOWS\system32\conhost.exe 0x4
+  37916 pwsh.exe emjob=True :: "C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\pwsh.exe" -NoProfile -File C:\Us
+    8148 cmd.exe emjob=True :: C:\WINDOWS\system32\cmd.exe /c ""C:\Users\piloto\piloto\harness\b05\claude-com-teto.cmd" -p --output-format js
+      3780 pwsh.exe emjob=True :: pwsh  -NoProfile -ExecutionPolicy Bypass -File "C:\Users\piloto\piloto\harness\b05\claude-com-teto.ps1" -p --o
+        41488 pwsh.exe emjob=True :: "C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\pwsh.exe" -NoProfile -File C:\Us
+--- razão
+{"ts":"2026-10-21T17:26:43.1810014-04:00","criacao":"2026-10-21T21:26:43.1064574Z","flags_job":"0x2000","pid":37916,"id":"ctl","evento":"controlador","versao_claude":"ignorada (teste)","execucao":"e8504c70a0b94505bb30c3b
+{"ts":"2026-10-21T17:26:43.5276040-04:00","execucao":"e8504c70a0b94505bb30c3b04048bea0","evento":"membros_job","pids":[28488,37916,33920]}
+{"ts":"2026-10-21T17:26:44.4839366-04:00","execucao":"e8504c70a0b94505bb30c3b04048bea0","evento":"membros_job","pids":[28488,37916,33920,1884,36624]}
+{"ts":"2026-10-21T17:26:47.3612900-04:00","execucao":"e8504c70a0b94505bb30c3b04048bea0","evento":"membros_job","pids":[28488,37916,33920,8148,3780]}
+{"execucao":"e8504c70a0b94505bb30c3b04048bea0","id":"e5d86557937a4aa390f7c96d5a9f19ab","evento":"inicio","folga":0.25,"ts":"2026-10-21T17:26:47.6025837-04:00","teto_usd":0.5}
+{"execucao":"e8504c70a0b94505bb30c3b04048bea0","criacao":"2026-10-21T21:26:47.7909187Z","evento":"pid","em_job":true,"argumentos":["-NoProfile","-File","C:\\Users\\piloto\\piloto\\harness\\b05\\testes\\fake-executor.ps1"
+{"ts":"2026-10-21T17:26:48.1860017-04:00","execucao":"e8504c70a0b94505bb30c3b04048bea0","evento":"membros_job","pids":[28488,37916,33920,8148,3780,41488]}
+--- após matar o lançador, ainda vivos da árvore:
+--- fim
+===== TESTES B05
+=== INICIO 2026-10-21T17:27:01 | piloto
+commit: 8fa89331f3f06de0d4dcf9e21316de20084418b0
+controlador (deve ser ced2ec45…): CED2EC45BE2FF840
+103413EEEE557891 claude-com-teto.ps1
+B46C50C03D7A86EF lancador.ps1
+E39515A13F99130A razao.ps1
+B683D9A80E791782 claude-com-teto.cmd
+== N7 + N8: chamada normal pelo controlador congelado
+  [ok] controlador terminou (0) e T1 done
+  [ok] razão: inicio e fim com custo 0.30
+  [ok] N8: argumentos do controlador preservados + --max-budget-usd 0.5 no fim
+  [ok] N8: stdin (prompt da tarefa) chegou ao executor
+  [ok] N8: cwd do executor é o repo
+  [ok] E1: razão (conhecido) = estado.json do controlador
+  [ok] P1: executor registrado dentro de um Job Object (IsProcessInJob)
+== N8: código de saída e JSON de erro preservados
+  [ok] controlador viu código 3 do executor (falhou, T1 failed)
+  [ok] razão: fim com custo 0.02 do JSON de erro
+== N9: várias chamadas esgotam o orçamento (0.30 cada; reserva 0.625; orçamento 1.60)
+  [ok] T1–T4 done, T5 failed
+  [ok] 4 inicios, 1 bloqueado, executor chamado 4 vezes
+  [ok] sem dupla cobrança: razão 1.20 = estado.json 1.20
+== N3: saldo insuficiente antes de iniciar
+  [ok] código 23, controlador não iniciou, executor não chamado
+== N10: falha de associação ao job / handle herdável
+  [ok] associação falha → código 24, controlador não iniciou
+  [ok] handle herdável → código 24, controlador não iniciou
+== N4: processo antigo vivo (PID + criação) e PID reutilizado
+  [ok] processo antigo vivo → código 22
+  [ok] mesmo PID com outra criação (reutilizado) → não bloqueia
+== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)
+  [ok] N1: executor estava no job antes da queda
+  [ok] N5: segunda instância para o mesmo EstadoDir → código 20
+  [ok] N1: executor morto em ≤ 5 s (PID + criação)
+  [ok] N1: controlador morto
+  [ok] N1: nenhum erro de associação ao job registrado
+  [ok] N1: tarefa ficou in_progress para a retomada
+  [ok] N2: chamada derrubada reservada (0.625), não zero
+  [ok] N6: retomada concluiu T1 (0)
+  [ok] N6: total = 0.625 (derrubada) + 0.30 (nova)
+  [ok] N6: um único commit da tarefa
+== E4: razão com linha parcial bloqueia
+  [ok] código 21, nada iniciado
+TOTAL B05: 28 / 28
+=== FIM 2026-10-21T17:29:05

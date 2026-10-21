@@ -1,0 +1,13 @@
+--- lançador
+B05-LANCADOR (24): limites do job inesperados: 0x0
+código: 24
+--- razão
+--- notificacoes b05
+[2026-10-21T16:55:10.4186365-04:00] codigo 24 — limites do job inesperados: 0x0
+--- config
+--- log controlador
+--- notificacoes controlador
+--- embrulho direto
+{"type":"result","subtype":"error_b05","is_error":true,"result":"B05: B05_DIR/config.json ausente","total_cost_usd":0}
+código direto: 1
+--- fake

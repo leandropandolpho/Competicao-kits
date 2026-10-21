@@ -76,3 +76,4 @@
 ## B-05 — candidata por fora do controlador (Atos 068–070)
 - Prioridade definida: B-05 antes da fase 6 (Claude, ChatGPT e Perplexity). Correção registrada: B-05 **não** é o único bloqueio da execução desassistida — B-07 e a aprovação humana continuam.
 - Contrato proposto em `fora-do-pacote/B05_CONTRATO.md` (lançador com Job Object + embrulho com teto por chamada e razão). Implementação só depois da aprovação do contrato.
+- **Candidata implementada e testada (Ato 073)**: `hibrido@8fa8933`, evidências em `fora-do-pacote/evidencias-b05/` (28/28 determinísticos; Claude real N1/N2/N6; P1/P2; 40/40). Achado relevante: filhos do pwsh empacotado não herdam job aninhado → associação ativa por varredura. Aguardando auditoria independente.

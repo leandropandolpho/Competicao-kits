@@ -1,0 +1,44 @@
+=== INICIO 2026-10-21T17:05:02 | piloto
+commit: 16fb15aaa42b021bbdad01668ee8c6003529c27a
+controlador (deve ser ced2ec45…): CED2EC45BE2FF840
+103413EEEE557891 claude-com-teto.ps1
+B0366AE3B44E1C87 lancador.ps1
+E39515A13F99130A razao.ps1
+B683D9A80E791782 claude-com-teto.cmd
+== N7 + N8: chamada normal pelo controlador congelado
+  [ok] controlador terminou (0) e T1 done
+  [ok] razão: inicio e fim com custo 0.30
+  [ok] N8: argumentos do controlador preservados + --max-budget-usd 0.5 no fim
+  [ok] N8: stdin (prompt da tarefa) chegou ao executor
+  [ok] N8: cwd do executor é o repo
+  [ok] E1: razão (conhecido) = estado.json do controlador
+  [ok] P1: executor registrado dentro de um Job Object (IsProcessInJob)
+== N8: código de saída e JSON de erro preservados
+  [ok] controlador viu código 3 do executor (falhou, T1 failed)
+  [ok] razão: fim com custo 0.02 do JSON de erro
+== N9: várias chamadas esgotam o orçamento (0.30 cada; reserva 0.625; orçamento 1.60)
+  [ok] T1–T4 done, T5 failed
+  [ok] 4 inicios, 1 bloqueado, executor chamado 4 vezes
+  [ok] sem dupla cobrança: razão 1.20 = estado.json 1.20
+== N3: saldo insuficiente antes de iniciar
+  [ok] código 23, controlador não iniciou, executor não chamado
+== N10: falha de associação ao job / handle herdável
+  [ok] associação falha → código 24, controlador não iniciou
+  [ok] handle herdável → código 24, controlador não iniciou
+== N4: processo antigo vivo (PID + criação) e PID reutilizado
+  [ok] processo antigo vivo → código 22
+  [ok] mesmo PID com outra criação (reutilizado) → não bloqueia
+== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)
+  [FALHOU] N1: executor estava no job antes da queda → pid 8772 membros 16972,34472
+  [ok] N5: segunda instância para o mesmo EstadoDir → código 20
+  [ok] N1: executor morto em ≤ 5 s (PID + criação)
+  [ok] N1: controlador morto
+  [ok] N1: tarefa ficou in_progress para a retomada
+  [ok] N2: chamada derrubada reservada (0.625), não zero
+  [FALHOU] N6: retomada concluiu T1 (0) → código 22 T1=in_progress B05-LANCADOR (22): processo de execução anterior ainda vivo: pid pid 8772 (chamada 2d2943ade9b143519984f3a658d82cba)
+  [FALHOU] N6: total = 0.625 (derrubada) + 0.30 (nova) → total 0.625
+  [FALHOU] N6: um único commit da tarefa
+== E4: razão com linha parcial bloqueia
+  [ok] código 21, nada iniciado
+TOTAL B05: 23 / 27
+=== FIM 2026-10-21T17:07:48
