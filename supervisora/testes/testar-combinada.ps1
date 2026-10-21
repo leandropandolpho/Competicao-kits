@@ -31,14 +31,10 @@ function Novo-Caso([string]$status, [bool]$semAlteracao, [bool]$alterarTesteDepo
 }
 
 function Lancador($c, [string]$modo) {
-  if ($IsWindows) {
-    $l = Join-Path $c.Base 'claude.cmd'
-    Set-Content -Encoding ascii $l @('@echo off', "set `"SUPMOCK_MODO=$modo`"", "set `"SUPMOCK_DIR=$($c.Mock)`"", "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$Fake`" %*", 'exit /b %ERRORLEVEL%')
-  } else {
-    $l = Join-Path $c.Base 'claude.sh'
-    Set-Content $l @('#!/usr/bin/env bash', "export SUPMOCK_MODO='$modo'", "export SUPMOCK_DIR='$($c.Mock)'", "pwsh -NoProfile -File '$Fake' `"`$@`"", 'exit $?'); chmod +x $l
-  }
-  return $l
+  # Chama o simulado direto pelo pwsh, com prefixo de argumentos. Sem .cmd/.sh no meio: o cmd.exe corta
+  # argumentos com quebra de linha (o prompt de sistema), o que falsearia os testes de argumentos.
+  $pw = (Get-Process -Id $PID).Path
+  return @{ Cmd = $pw; Prefixo = (@('-NoProfile', '-File', $Fake, '--mock-modo', $modo, '--mock-dir', $c.Mock) -join '|') }
 }
 
 
@@ -52,7 +48,7 @@ function Novo-LinkPasta([string]$link, [string]$alvo) {
 function LancadorEm($c, [string]$nome, [string]$modos) {
   $sub = @{ Base = (Join-Path $c.Base $nome); Mock = (Join-Path $c.Base "mock-$nome") }
   New-Item -ItemType Directory -Force $sub.Base | Out-Null
-  return @{ Cmd = (Lancador $sub $modos); Mock = $sub.Mock }
+  $l = Lancador $sub $modos; return @{ Cmd = $l.Cmd; Prefixo = $l.Prefixo; Mock = $sub.Mock }
 }
 function Chamadas($m) { $f = Join-Path $m 'chamadas.txt'; if (Test-Path $f) { [int](Get-Content $f -Raw) } else { 0 } }
 function ArgsDe($m, $n) { $f = Join-Path $m "args-$n.json"; if (Test-Path $f) { Get-Content $f -Raw | ConvertFrom-Json } else { $null } }
@@ -62,7 +58,7 @@ function Combinar($c, [string]$modosA, [string]$modosB, [string]$modosM = 'escal
   $hT = (Get-FileHash $c.Tarefas).Hash; $head = git -C $c.Repo rev-parse HEAD
   $saida = Join-Path $c.Base 'comb'
   $out = & pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida `
-           -ProvedorA claude -ProvedorB claude -ProvedorArbitro claude -CmdA $A.Cmd -CmdB $B.Cmd -CmdArbitro $M.Cmd -TimeoutSec 60 2>&1
+           -ProvedorA claude -ProvedorB claude -ProvedorArbitro claude -CmdA $A.Cmd -CmdB $B.Cmd -CmdArbitro $M.Cmd -PrefixoA $A.Prefixo -PrefixoB $B.Prefixo -PrefixoArbitro $M.Prefixo -TimeoutSec 60 2>&1
   $res = Get-Content (Join-Path $saida 'decisao-combinada.json') -Raw | ConvertFrom-Json
   return @{ Res = $res; A = $A.Mock; B = $B.Mock; M = $M.Mock; Saida = ($out -join ' ')
             Intacto = ((Get-FileHash $c.Tarefas).Hash -eq $hT) -and ((git -C $c.Repo rev-parse HEAD) -eq $head) -and -not (git -C $c.Repo status --porcelain) }
@@ -117,14 +113,14 @@ Checar 'final liberar, marcado liberar_por_desempate' { param($r) $r.Res.decisao
 
 "== K10 (F5-01) SaidaDir dentro do repositório"
 $c = Novo-Caso 'hold' $true; $A = LancadorEm $c 'A' 'escalar'
-& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'comb') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -ProvedorB claude 2>&1 | Out-Null
+& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'comb') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -PrefixoA $A.Prefixo -PrefixoB $A.Prefixo -PrefixoArbitro $A.Prefixo -ProvedorB claude 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (código 4), nada criado no repo' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'comb')) -and -not (git -C $c.Repo status --porcelain) } $null
 
 "== K11 (F5-01-R) SaidaDir da combinada é link/junction para dentro do repo"
 $c = Novo-Caso 'hold' $true; $A = LancadorEm $c 'A' 'escalar'; $alvo = Join-Path $c.Repo 'alvo'
 Novo-LinkPasta (Join-Path $c.Base 'comb-link') $alvo
-& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Base 'comb-link') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -ProvedorB claude 2>&1 | Out-Null
+& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Base 'comb-link') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -PrefixoA $A.Prefixo -PrefixoB $A.Prefixo -PrefixoArbitro $A.Prefixo -ProvedorB claude 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (4), nada gravado no repo' { param($r) $codigo -eq 4 -and -not @(Get-ChildItem $alvo -Force).Count } $null
 

@@ -24,6 +24,7 @@ param(
   [double]$MaxCustoTotalUsd   = 3.00,
   [int]$TimeoutSec            = 180,
   [string]$ClaudeCmd          = 'claude',
+  [string]$ClaudePrefixo      = '',     # argumentos antes dos do Claude, separados por '|' (usado pelos testes no Windows)
   [string]$OpenAIModelo       = 'gpt-6-astra',
   [string]$OpenAIChavePath    = '',
   [double]$OpenAIPrecoEntradaPorMTokUsd = -1,   # sem preço informado, o custo fica DESCONHECIDO (conta pelo teto)
@@ -217,7 +218,8 @@ function Provedor-Claude([string]$entrada) {
   $vazio = Join-Path ([IO.Path]::GetTempPath()) ('sup-' + [guid]::NewGuid().ToString('N').Substring(0, 10))
   New-Item -ItemType Directory -Force -Path $vazio | Out-Null
   try {
-    $argumentos = @('-p', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--safe-mode',
+    $prefixo = @(if ($ClaudePrefixo) { $ClaudePrefixo -split '\|' })
+    $argumentos = $prefixo + @('-p', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--safe-mode',
                     '--no-session-persistence', '--max-budget-usd', ([string]$MaxCustoChamadaUsd).Replace(',', '.'),
                     '--system-prompt', $Instrucoes, '--json-schema', $EsquemaJson)
     $r = Rodar-Processo $exe $argumentos $entrada $TimeoutSec $vazio

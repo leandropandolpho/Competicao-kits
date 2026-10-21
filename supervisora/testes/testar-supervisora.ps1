@@ -39,20 +39,16 @@ function Novo-LinkPasta([string]$link, [string]$alvo) {
 }
 
 function Lancador($c, [string]$modo) {
-  if ($IsWindows) {
-    $l = Join-Path $c.Base 'claude.cmd'
-    Set-Content -Encoding ascii $l @('@echo off', "set `"SUPMOCK_MODO=$modo`"", "set `"SUPMOCK_DIR=$($c.Mock)`"", "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$Fake`" %*", 'exit /b %ERRORLEVEL%')
-  } else {
-    $l = Join-Path $c.Base 'claude.sh'
-    Set-Content $l @('#!/usr/bin/env bash', "export SUPMOCK_MODO='$modo'", "export SUPMOCK_DIR='$($c.Mock)'", "pwsh -NoProfile -File '$Fake' `"`$@`"", 'exit $?'); chmod +x $l
-  }
-  return $l
+  # Chama o simulado direto pelo pwsh, com prefixo de argumentos. Sem .cmd/.sh no meio: o cmd.exe corta
+  # argumentos com quebra de linha (o prompt de sistema), o que falsearia os testes de argumentos.
+  $pw = (Get-Process -Id $PID).Path
+  return @{ Cmd = $pw; Prefixo = (@('-NoProfile', '-File', $Fake, '--mock-modo', $modo, '--mock-dir', $c.Mock) -join '|') }
 }
 
 function Rodar($c, [string]$modo, [hashtable]$extra = @{}) {
   $l = Lancador $c $modo
   $hT = (Get-FileHash $c.Tarefas).Hash; $hR = (git -C $c.Repo status --porcelain) -join '|'; $headAntes = git -C $c.Repo rev-parse HEAD
-  $a = @{ RepoPath = $c.Repo; TarefasPath = $c.Tarefas; EstadoDir = $c.Estado; ClaudeCmd = $l; TimeoutSec = 60 }
+  $a = @{ RepoPath = $c.Repo; TarefasPath = $c.Tarefas; EstadoDir = $c.Estado; ClaudeCmd = $l.Cmd; ClaudePrefixo = $l.Prefixo; TimeoutSec = 60 }
   foreach ($k in $extra.Keys) { $a[$k] = $extra[$k] }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $saida = & pwsh -NoProfile -File $Sup @a 2>&1
@@ -185,7 +181,7 @@ Checar 'conteúdo externo NÃO entra no dossiê; o interno entra' { param($r) $d
 
 "== S22 (F5-01) SaidaDir dentro do repositório"
 $c = Novo-Caso 'hold' $true; $l = Lancador $c 'liberar_alta'
-& pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'saida-sup') -ClaudeCmd $l 2>&1 | Out-Null
+& pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'saida-sup') -ClaudeCmd $l.Cmd -ClaudePrefixo $l.Prefixo 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (código 4), nada criado no repo, nenhuma chamada' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'saida-sup')) -and -not (git -C $c.Repo status --porcelain) -and -not (Test-Path (Join-Path $c.Mock 'chamadas.txt')) } $null
 
@@ -198,7 +194,7 @@ Checar 'conteúdo via pasta-link NÃO entra; o arquivo comum entra' { param($r) 
 
 function Rodar-Saida($c, [string]$saida) {
   $l = Lancador $c 'liberar_alta'
-  & pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida -ClaudeCmd $l 2>&1 | Out-Null
+  & pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida -ClaudeCmd $l.Cmd -ClaudePrefixo $l.Prefixo 2>&1 | Out-Null
   return $LASTEXITCODE
 }
 "== S24 (F5-01-R) SaidaDir é link/junction externo apontando para dentro do repo"

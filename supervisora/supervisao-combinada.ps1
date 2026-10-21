@@ -20,6 +20,7 @@ param(
   [ValidateSet('claude', 'openai')][string]$ProvedorB = 'openai',
   [ValidateSet('claude', 'openai')][string]$ProvedorArbitro = 'claude',
   [string]$CmdA = 'claude', [string]$CmdB = 'claude', [string]$CmdArbitro = 'claude',
+  [string]$PrefixoA = '', [string]$PrefixoB = '', [string]$PrefixoArbitro = '',
   [double]$MaxCustoChamadaUsd = 0.50,
   [double]$MaxCustoTotalUsd   = 5.00,
   [int]$TimeoutSec            = 180,
@@ -55,7 +56,7 @@ function Custo-Acumulado {
   return $t
 }
 
-function Chamar([string]$etapa, [string]$provedor, [string]$cmd, [string]$papel, [object[]]$pareceres) {
+function Chamar([string]$etapa, [string]$provedor, [string]$cmd, [string]$papel, [object[]]$pareceres, [string]$prefixo = '') {
   # Teto TOTAL da combinação: soma de todas as etapas. Cada etapa tem pasta própria.
   $gasto = Custo-Acumulado
   $dir = Join-Path $SaidaDir $etapa
@@ -66,6 +67,7 @@ function Chamar([string]$etapa, [string]$provedor, [string]$cmd, [string]$papel,
   $a = @{ RepoPath = $RepoPath; TarefasPath = $TarefasPath; EstadoDir = $EstadoDir; SaidaDir = $dir; Provedor = $provedor
           MaxCustoChamadaUsd = $MaxCustoChamadaUsd; MaxCustoTotalUsd = $MaxCustoTotalUsd; TimeoutSec = $TimeoutSec
           ClaudeCmd = $cmd; Papel = $papel; OpenAIUrl = $OpenAIUrl }
+  if ($prefixo) { $a.ClaudePrefixo = $prefixo }
   if ($ContextoPath) { $a.ContextoPath = $ContextoPath }
   if ($OpenAIChavePath) { $a.OpenAIChavePath = $OpenAIChavePath }
   if ($pareceres -and $pareceres.Count) {
@@ -86,20 +88,20 @@ $trilha = [System.Collections.Generic.List[object]]::new()
 function Registrar([string]$etapa, [string]$quem, $rec) { $trilha.Add([ordered]@{ etapa = $etapa; supervisora = $quem; decisao = "$($rec.decisao)"; origem = "$($rec.origem)"; confianca = "$($rec.confianca)"; motivo_override = "$(Prop $rec 'motivo_override')"; custo_usd = $(Prop $rec 'custo_usd'); justificativa = "$($rec.justificativa)" }) }
 
 $final = $null; $via = ''; $marca = ''
-$recA = Chamar 'A1' $ProvedorA $CmdA 'supervisora' @(); Registrar 'independente' 'A' $recA
+$recA = Chamar 'A1' $ProvedorA $CmdA 'supervisora' @() $PrefixoA; Registrar 'independente' 'A' $recA
 if ("$($recA.origem)" -eq 'regra_R1') { $final = 'escalar'; $via = 'regra_R1' }
 else {
-  $recB = Chamar 'B1' $ProvedorB $CmdB 'supervisora' @(); Registrar 'independente' 'B' $recB
+  $recB = Chamar 'B1' $ProvedorB $CmdB 'supervisora' @() $PrefixoB; Registrar 'independente' 'B' $recB
   if ((Falhou $recA) -or (Falhou $recB)) { $final = 'escalar'; $via = 'falha_ou_invalidada_na_avaliacao_independente' }
   elseif ($recA.decisao -eq $recB.decisao) { $final = "$($recA.decisao)"; $via = 'consenso_independente' }
   else {
     # Rodada de troca: cada uma vê o parecer da outra.
-    $recA2 = Chamar 'A2' $ProvedorA $CmdA 'supervisora' @((Parecer 'B' $recB)); Registrar 'troca' 'A' $recA2
-    $recB2 = Chamar 'B2' $ProvedorB $CmdB 'supervisora' @((Parecer 'A' $recA)); Registrar 'troca' 'B' $recB2
+    $recA2 = Chamar 'A2' $ProvedorA $CmdA 'supervisora' @((Parecer 'B' $recB)) $PrefixoA; Registrar 'troca' 'A' $recA2
+    $recB2 = Chamar 'B2' $ProvedorB $CmdB 'supervisora' @((Parecer 'A' $recA)) $PrefixoB; Registrar 'troca' 'B' $recB2
     if ((Falhou $recA2) -or (Falhou $recB2)) { $final = 'escalar'; $via = 'falha_ou_invalidada_na_troca' }
     elseif ($recA2.decisao -eq $recB2.decisao) { $final = "$($recA2.decisao)"; $via = 'consenso_apos_troca' }
     else {
-      $recM = Chamar 'M' $ProvedorArbitro $CmdArbitro 'arbitro' @((Parecer 'A' $recA2), (Parecer 'B' $recB2)); Registrar 'desempate' 'arbitro' $recM
+      $recM = Chamar 'M' $ProvedorArbitro $CmdArbitro 'arbitro' @((Parecer 'A' $recA2), (Parecer 'B' $recB2)) $PrefixoArbitro; Registrar 'desempate' 'arbitro' $recM
       if (Falhou $recM) { $final = 'escalar'; $via = 'falha_ou_invalidada_no_desempate' }
       elseif ("$($recM.confianca)" -ne 'alta') { $final = 'escalar'; $via = 'arbitro_em_duvida' }
       else {
