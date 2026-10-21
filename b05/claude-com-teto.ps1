@@ -59,7 +59,14 @@ catch {
   Sair-Erro "executor não iniciou: $($_.Exception.Message)"
 }
 try { $criacao = $p.StartTime.ToUniversalTime().ToString('o') } catch { $criacao = (Get-Date).ToUniversalTime().ToString('o') }
-try { Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = "$($cfg.execucao)"; pid = $p.Id; criacao = $criacao; argumentos = @($psi.ArgumentList) } } catch { }
+$emJob = $null
+if ($IsWindows) {
+  try {
+    Add-Type -Namespace B05 -Name Proc -MemberDefinition '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool IsProcessInJob(System.IntPtr proc, System.IntPtr job, out bool result);' -ErrorAction Stop
+    $r0 = $false; if ([B05.Proc]::IsProcessInJob($p.Handle, [IntPtr]::Zero, [ref]$r0)) { $emJob = $r0 }
+  } catch { }
+}
+try { Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = "$($cfg.execucao)"; pid = $p.Id; criacao = $criacao; em_job = $emJob; argumentos = @($psi.ArgumentList) } } catch { }
 $out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
 try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b, 0, $b.Length); $p.StandardInput.Close() } catch { }
 $p.WaitForExit()

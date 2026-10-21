@@ -8,20 +8,29 @@ $script:Utf8SemBom = [System.Text.UTF8Encoding]::new($false)
 function Razao-Arquivo([string]$dir) { Join-Path $dir 'razao.jsonl' }
 
 function Razao-Gravar([string]$dir, [hashtable]$evento) {
-  # Escrita durável: abre, acrescenta UMA linha, WriteThrough + Flush(true). Exceção = falha de gravação.
+  # Escrita durável e serializada: trava nomeada do razão (reentrante na mesma thread), abre, acrescenta UMA
+  # linha, WriteThrough + Flush(true). Exceção = falha de gravação (quem chama decide se bloqueia).
   $evento['ts'] = (Get-Date).ToString('o')
   $linha = ($evento | ConvertTo-Json -Compress -Depth 5) + "`n"
   $bytes = $script:Utf8SemBom.GetBytes($linha)
-  $fs = [System.IO.FileStream]::new((Razao-Arquivo $dir), [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write,
-                                    [System.IO.FileShare]::Read, 4096, [System.IO.FileOptions]::WriteThrough)
-  try { $fs.Write($bytes, 0, $bytes.Length); $fs.Flush($true) } finally { $fs.Dispose() }
+  $mtx = [System.Threading.Mutex]::new($false, (Razao-Nome-Trava $dir))
+  $obtida = $false
+  try {
+    try { $obtida = $mtx.WaitOne(30000) } catch { $ex = $_.Exception; while ($ex -and -not ($ex -is [System.Threading.AbandonedMutexException])) { $ex = $ex.InnerException }; if ($ex) { $obtida = $true } else { throw } }
+    if (-not $obtida) { throw 'trava do razão não obtida para gravar' }
+    $fs = [System.IO.FileStream]::new((Razao-Arquivo $dir), [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write,
+                                      [System.IO.FileShare]::ReadWrite, 4096, [System.IO.FileOptions]::WriteThrough)
+    try { $fs.Write($bytes, 0, $bytes.Length); $fs.Flush($true) } finally { $fs.Dispose() }
+  } finally { if ($obtida) { try { $mtx.ReleaseMutex() } catch { } }; $mtx.Dispose() }
 }
 
 function Razao-Ler([string]$dir) {
   # Devolve @{ Ok; Motivo; Eventos }. Qualquer linha ilegível ou parcial → Ok = $false.
   $arq = Razao-Arquivo $dir
   if (-not (Test-Path -LiteralPath $arq)) { return @{ Ok = $true; Motivo = ''; Eventos = @() } }
-  $texto = [System.IO.File]::ReadAllText($arq, $script:Utf8SemBom)
+  # Leitura compartilhada: outro processo pode estar com o arquivo aberto para acrescentar.
+  $fs = [System.IO.FileStream]::new($arq, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+  try { $sr = [System.IO.StreamReader]::new($fs, $script:Utf8SemBom); $texto = $sr.ReadToEnd(); $sr.Dispose() } finally { $fs.Dispose() }
   if ($texto.Length -and -not $texto.EndsWith("`n")) { return @{ Ok = $false; Motivo = 'última linha do razão incompleta'; Eventos = @() } }
   $ev = [System.Collections.Generic.List[object]]::new(); $n = 0
   foreach ($l in ($texto -split "`n")) {
@@ -54,17 +63,24 @@ function Razao-Contabilizar($eventos, [double]$folga) {
             Total = [math]::Round($conhecido + $reservado, 6); Abertas = $abertas }
 }
 
-function Processo-Vivo([int]$processId, [string]$criacaoIso) {
-  # E4: vivo só se o PID existir COM o mesmo horário de criação (PID reutilizado não conta).
+function Para-Utc($v) {
+  # ConvertFrom-Json do pwsh 7 converte texto ISO em DateTime; aceita os dois, sem depender da cultura.
+  if ($v -is [datetime]) { return $v.ToUniversalTime() }
+  return [datetime]::Parse("$v", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
+
+function Processo-Vivo([int]$processId, $criacao) {
+  # E4: vivo só se o PID existir COM o mesmo horário de criação (tolerância 10 ms); PID reutilizado não conta.
   $p = Get-Process -Id $processId -ErrorAction SilentlyContinue
   if (-not $p) { return $false }
-  try { $c = $p.StartTime.ToUniversalTime().ToString('o') } catch { return $true }   # sem acesso: conservador
-  return ([datetime]::Parse($criacaoIso).ToUniversalTime().ToString('o') -eq $c)
+  try { $real = $p.StartTime.ToUniversalTime() } catch { return $true }   # sem acesso ao horário: conservador
+  try { $reg = Para-Utc $criacao } catch { return $true }                 # registro ilegível: conservador
+  return ([math]::Abs(($real - $reg).TotalMilliseconds) -le 10)
 }
 
 function Razao-ProcessosVivos($eventos) {
   # P4: processos registrados (executor e controlador) ainda vivos.
-  return @($eventos | Where-Object { $_.evento -in @('pid', 'controlador') } | Where-Object { Processo-Vivo ([int]$_.pid) "$($_.criacao)" } |
+  return @($eventos | Where-Object { $_.evento -in @('pid', 'controlador') } | Where-Object { Processo-Vivo ([int]$_.pid) $_.criacao } |
            ForEach-Object { "$($_.evento) pid $($_.pid) (chamada $($_.id))" })
 }
 

@@ -57,7 +57,7 @@ Checar 'N8: stdin (prompt da tarefa) chegou ao executor' ("$($ch.stdin)".Contain
 Checar 'N8: cwd do executor é o repo' ("$($ch.cwd)" -eq $a.Repo) "$($ch.cwd)"
 $est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
 Checar 'E1: razão (conhecido) = estado.json do controlador' ([math]::Abs((Razao-Contabilizar $ev 0.25).Conhecido - [double]$est.custo_acumulado_usd) -lt 1e-6) "razão $((Razao-Contabilizar $ev 0.25).Conhecido) / estado $($est.custo_acumulado_usd)"
-Checar 'P1: membros do job registrados incluem o executor' ((@($ev | Where-Object evento -eq 'membros_job' | ForEach-Object { @($_.pids) }) -contains [int]$ch.pid)) "pid $($ch.pid)"
+Checar 'P1: executor registrado dentro de um Job Object (IsProcessInJob)' ((@($ev | Where-Object evento -eq 'pid'))[0].em_job -eq $true) "em_job $((@($ev | Where-Object evento -eq 'pid'))[0].em_job)"
 
 "== N8: código de saída e JSON de erro preservados"
 $a = Novo-Ambiente 1; $r = Rodar-Lancador $a 3 'falha:3'
