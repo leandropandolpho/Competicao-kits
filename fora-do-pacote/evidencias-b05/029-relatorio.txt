@@ -1,0 +1,10 @@
+=== INICIO 2026-10-21T17:55:15
+SHA256 do zip: D2F952EBDBF24386CB8923553AA58E41A846DB35A6155EA04C58142A4B16DBB7 | confere com a página oficial: True
+pwsh portátil: C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe | versão: 7.6.7
+--- LOJA: hospedeiro 37860 (C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\pwsh.exe); descendentes: 35032 conhost.exe | 27872 pwsh.exe | 25772 conhost.exe | 38864 pwsh.exe | 33256 conhost.exe | 16936 cmd.exe | 33536 PING.EXE
+    saída da sonda: associou-se: True | flags: 0x2000
+    após matar o hospedeiro, descendentes vivos: 3 33256 conhost.exe | 16936 cmd.exe | 33536 PING.EXE
+--- PORTATIL: hospedeiro 3032 (C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe); descendentes: 21052 conhost.exe | 9208 pwsh.exe | 37584 conhost.exe | 18812 pwsh.exe | 2044 conhost.exe | 20172 cmd.exe | 32084 PING.EXE
+    saída da sonda: associou-se: True | flags: 0x2000
+    após matar o hospedeiro, descendentes vivos: 0 
+=== FIM 2026-10-21T17:56:23

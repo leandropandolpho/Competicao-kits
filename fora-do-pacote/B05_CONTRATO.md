@@ -1,5 +1,5 @@
 # Contrato da candidata B-05 — custo de chamada interrompida, processos órfãos e retomada
-**v1: Ato 070 · v2: Ato 072 (emendas E1–E5 e cenários N8–N10 do Ato 071, ChatGPT) · Autor: Claude (Auditor Base) · Situação: APROVADO COM EMENDAS (Ato 071); implementação autorizada após esta versão**
+**v1: Ato 070 · v2: Ato 072 (emendas do Ato 071) · v3: Ato 075 (resposta aos findings B05-F01..F05 do Ato 074) · Autor: Claude (Auditor Base) · Situação v3: PROPOSTA — aguardando aprovação antes de implementar (exigência do Ato 074 para mudança da arquitetura de contenção)**
 
 Base: convergência dos Atos 068 (Claude), 069 (ChatGPT) e 069 (Perplexity, mesma família do Claude): resolver o B-05 **sem alterar o controlador congelado** `7cd7864` (`ced2ec45…608e`) nem a supervisora `6b45dea`.
 
@@ -85,3 +85,44 @@ Piloto de autonomia limitada: tarefas não críticas, limites financeiros, alert
 | N8 | Controlador congelado invoca o embrulho real | Argumentos (+ `--max-budget-usd`), stdin, JSON e código de saída preservados |
 | N9 | Várias chamadas na mesma execução esgotam o orçamento | A próxima é bloqueada **antes** de iniciar; sem dupla cobrança; razão × `estado.json` reconciliados |
 | N10 | Falha de associação ao Job Object ou handle herdável | Falha segura: o controlador não inicia |
+
+## 8. Versão 3 (Ato 075) — resposta aos findings do Ato 074
+A candidata `8fa8933` fica **congelada como referência histórica** (status HOLD). A v3 gera uma nova candidata; o controlador `7cd7864` e a supervisora `6b45dea` continuam intocados. Prevalece sobre as seções anteriores em caso de conflito.
+
+### Evidência que fundamenta a mudança (sonda 029, `evidencias-b05/029-relatorio.txt`)
+Mesmo procedimento (job com `KILL_ON_JOB_CLOSE`, hospedeiro se associa, filho pwsh → cmd → ping, criação com `UseShellExecute = false`, depois o hospedeiro é morto):
+| Hospedeiro | Descendentes vivos após matar o hospedeiro |
+|---|---|
+| pwsh da Microsoft Store (empacotado, `WindowsApps`) | **3** (conhost, cmd, ping) — escaparam do job |
+| pwsh **portátil** oficial 7.6.7 (zip, SHA-256 `D2F952EB…16DBB7` conferido com a página de release) | **0** |
+Conclusão: a falha de herança é do **pwsh empacotado**; com pwsh não empacotado a herança nativa do Windows funciona — o processo nasce dentro do job (associação atômica na criação, sem janela).
+
+### B05-F01 — Contenção desde a criação, sem depender de varredura
+- **H1.** Lançador, controlador e embrulho rodam no **pwsh portátil** (não empacotado), em `C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe`, com hash do `pwsh.exe` fixado no lançador. O embrulho `.cmd` chama esse pwsh pelo caminho absoluto (via variável `B05_PWSH` definida pelo lançador), nunca o `pwsh` do PATH.
+- **H2.** O lançador **recusa** iniciar (código 27) se ele próprio, ou o pwsh indicado para o controlador, estiver sob `WindowsApps` (empacotado) ou com hash diferente do fixado.
+- **H3.** Contenção = **herança nativa**. A varredura passa a ser só **verificação** (a cada 100 ms): todo descendente vivo encontrado **fora** do job ⇒ falha fechada (ver F02). A varredura **não associa** mais nada.
+
+### B05-F02 — Falha fechada
+- **H4.** Qualquer descendente vivo fora do job, ou impossível de verificar (OpenProcess negado com o processo ainda existente), ⇒ o lançador encerra o **job inteiro** (`TerminateJobObject`), encerra o processo detectado fora dele, grava `contencao_violada` no razão e sai com código 29. Processo que terminou entre o snapshot e a verificação (não existe mais) não conta.
+- **H5.** Um PID só é marcado como verificado **depois** da confirmação `IsProcessInJob = true` (corrige a marcação antecipada apontada no Ato 074).
+
+### B05-F03 — Configuração por execução e exclusão por pasta do razão
+- **H6.** Configuração **imutável por execução**: `RazaoDir/config-<execucao>.json`, gravada uma vez; o embrulho a localiza por `B05_EXECUCAO` (variável definida pelo lançador). Não existe mais `config.json` compartilhado.
+- **H7.** Duas travas no lançador: por `EstadoDir` **e** por `RazaoDir`; qualquer uma ocupada ⇒ código 20.
+
+### B05-F04 — Reconciliação obrigatória
+- **H8.** Invariante por `EstadoDir`: `estado.custo_acumulado_usd = base_historica + razão.conhecido` (tolerância 1e-6), onde `base_historica` é gravada uma única vez no razão (`evento: base_historica`) na primeira execução B-05 sobre um estado já existente (custos anteriores à implantação do razão).
+- **H9.** O lançador confere o invariante **antes** de iniciar (inclusive na retomada) e **depois** que o controlador termina; divergência ⇒ código 28 antes de iniciar, ou registro `divergencia_reconciliacao` + código 28 ao terminar.
+
+### B05-F05 — PID obrigatório
+- **H10.** Se a gravação do evento `pid` falhar, o embrulho **mata imediatamente** o executor recém-criado (e a árvore dele), **não** grava `fim` (a reserva permanece, conservadora), devolve erro ao controlador e sai com código ≠ 0.
+
+### Testes negativos novos (Windows real), além da regressão N1–N10, P1/P2 e 40/40
+| ID | Cenário | Esperado |
+|---|---|---|
+| N11 | Lançador ou controlador indicado em pwsh empacotado (WindowsApps) | Código 27, nada iniciado |
+| N12 | Descendente fora do job (simulado: processo iniciado com breakaway pelo próprio teste, quando o SO permitir; senão, processo-sentinela registrado como descendente) | `contencao_violada`, job encerrado, código 29 |
+| N13 | Duas execuções com `EstadoDir` diferentes e o mesmo `RazaoDir` | A segunda recusa (código 20); configuração da primeira intacta |
+| N14 | `estado.json` com custo divergente do razão | Código 28 antes de iniciar |
+| N15 | Falha forçada na gravação do `pid` (razão somente-leitura após a reserva) | Executor encerrado, reserva mantida, código ≠ 0 |
+| N1r | Queda do lançador com Claude real | Todos os descendentes (inclusive filhos do claude.exe) mortos; **nenhum** evento de associação forçada (a varredura só verifica) |
