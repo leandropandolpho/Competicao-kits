@@ -46,7 +46,9 @@ function Status($a) { @((Get-Content $a.Tarefas -Raw | ConvertFrom-Json).tarefas
 
 "== N7 + N8: chamada normal pelo controlador congelado"
 $a = Novo-Ambiente 1; $r = Rodar-Lancador $a 3 'ok:0.30'
-$ev = Eventos $a; $ch = Get-Content "$($a.Fake)\chamada-1.json" -Raw | ConvertFrom-Json
+$ev = Eventos $a
+if (-not (Test-Path "$($a.Fake)\chamada-1.json")) { "  [FALHOU] executor simulado não foi chamado → código $($r.Codigo): $($r.Saida)"; exit 1 }
+$ch = Get-Content "$($a.Fake)\chamada-1.json" -Raw | ConvertFrom-Json
 $args1 = @($ch.args)
 Checar 'controlador terminou (0) e T1 done' ($r.Codigo -eq 0 -and (Status $a) -eq 'T1=done') "código $($r.Codigo); $(Status $a); $($r.Saida)"
 Checar 'razão: inicio e fim com custo 0.30' ((@($ev | Where-Object evento -eq 'inicio').Count -eq 1) -and ((@($ev | Where-Object evento -eq 'fim'))[0].custo_usd -eq 0.3))
