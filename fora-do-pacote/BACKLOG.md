@@ -72,3 +72,7 @@
 ### F5-01-R e F5-04-R · Links/junctions (reauditoria do Ato 065) — RESOLVIDOS (Ato 066)
 - `supervisora/caminhos.ps1` (verificação física). Evidência Windows: `evidencias-fase5/016` a `018` (junctions reais; 40/40 e 17/17; regressão real 7/7).
 - Pendente: confirmação do ChatGPT para a integração operacional definitiva da supervisora combinada.
+
+## B-05 — candidata por fora do controlador (Atos 068–070)
+- Prioridade definida: B-05 antes da fase 6 (Claude, ChatGPT e Perplexity). Correção registrada: B-05 **não** é o único bloqueio da execução desassistida — B-07 e a aprovação humana continuam.
+- Contrato proposto em `fora-do-pacote/B05_CONTRATO.md` (lançador com Job Object + embrulho com teto por chamada e razão). Implementação só depois da aprovação do contrato.
