@@ -28,7 +28,7 @@ function Args-Lancador($a, [double]$orc, [string[]]$extra = @()) {
   return @('-NoProfile', '-File', $Lanc, '-RepoPath', $a.Repo, '-TarefasPath', $a.Tarefas, '-EstadoDir', $a.Estado, '-RazaoDir', $a.Razao,
            '-ControladorPath', $ControladorPath, '-TestCmd', 'pwsh -NoProfile -File testes/teste-ok.ps1', '-TestPaths', 'testes/*',
            '-OrcamentoUsd', "$orc", '-TetoChamadaUsd', '0.5', '-Folga', '0.25', '-MaxTentativas', '1', '-TimeoutSec', '120',
-           '-Executor', $Pw, '-ExecutorPrefixo', "-NoProfile|-File|$Fake", '-IgnorarVersao') + $extra
+           '-Executor', $Pw, "-ExecutorPrefixo:-NoProfile|-File|$Fake", '-IgnorarVersao') + $extra
 }
 function Rodar-Lancador($a, [double]$orc, [string]$modo, [string[]]$extra = @()) {
   $env:B05FAKE_MODO = $modo; $env:B05FAKE_DIR = $a.Fake
