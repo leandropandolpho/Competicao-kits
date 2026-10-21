@@ -181,7 +181,7 @@ Checar 'conteúdo externo NÃO entra no dossiê; o interno entra' { param($r) $d
 
 "== S22 (F5-01) SaidaDir dentro do repositório"
 $c = Novo-Caso 'hold' $true; $l = Lancador $c 'liberar_alta'
-& pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'saida-sup') -ClaudeCmd $l.Cmd -ClaudePrefixo $l.Prefixo 2>&1 | Out-Null
+& pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'saida-sup') -ClaudeCmd $l.Cmd -ClaudePrefixo:$($l.Prefixo) 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (código 4), nada criado no repo, nenhuma chamada' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'saida-sup')) -and -not (git -C $c.Repo status --porcelain) -and -not (Test-Path (Join-Path $c.Mock 'chamadas.txt')) } $null
 
@@ -194,7 +194,7 @@ Checar 'conteúdo via pasta-link NÃO entra; o arquivo comum entra' { param($r) 
 
 function Rodar-Saida($c, [string]$saida) {
   $l = Lancador $c 'liberar_alta'
-  & pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida -ClaudeCmd $l.Cmd -ClaudePrefixo $l.Prefixo 2>&1 | Out-Null
+  & pwsh -NoProfile -File $Sup -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida -ClaudeCmd $l.Cmd -ClaudePrefixo:$($l.Prefixo) 2>&1 | Out-Null
   return $LASTEXITCODE
 }
 "== S24 (F5-01-R) SaidaDir é link/junction externo apontando para dentro do repo"

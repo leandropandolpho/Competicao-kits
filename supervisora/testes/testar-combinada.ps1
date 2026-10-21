@@ -58,7 +58,7 @@ function Combinar($c, [string]$modosA, [string]$modosB, [string]$modosM = 'escal
   $hT = (Get-FileHash $c.Tarefas).Hash; $head = git -C $c.Repo rev-parse HEAD
   $saida = Join-Path $c.Base 'comb'
   $out = & pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir $saida `
-           -ProvedorA claude -ProvedorB claude -ProvedorArbitro claude -CmdA $A.Cmd -CmdB $B.Cmd -CmdArbitro $M.Cmd -PrefixoA $A.Prefixo -PrefixoB $B.Prefixo -PrefixoArbitro $M.Prefixo -TimeoutSec 60 2>&1
+           -ProvedorA claude -ProvedorB claude -ProvedorArbitro claude -CmdA $A.Cmd -CmdB $B.Cmd -CmdArbitro $M.Cmd -PrefixoA:$($A.Prefixo) -PrefixoB:$($B.Prefixo) -PrefixoArbitro:$($M.Prefixo) -TimeoutSec 60 2>&1
   $res = Get-Content (Join-Path $saida 'decisao-combinada.json') -Raw | ConvertFrom-Json
   return @{ Res = $res; A = $A.Mock; B = $B.Mock; M = $M.Mock; Saida = ($out -join ' ')
             Intacto = ((Get-FileHash $c.Tarefas).Hash -eq $hT) -and ((git -C $c.Repo rev-parse HEAD) -eq $head) -and -not (git -C $c.Repo status --porcelain) }
@@ -113,14 +113,14 @@ Checar 'final liberar, marcado liberar_por_desempate' { param($r) $r.Res.decisao
 
 "== K10 (F5-01) SaidaDir dentro do repositório"
 $c = Novo-Caso 'hold' $true; $A = LancadorEm $c 'A' 'escalar'
-& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'comb') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -PrefixoA $A.Prefixo -PrefixoB $A.Prefixo -PrefixoArbitro $A.Prefixo -ProvedorB claude 2>&1 | Out-Null
+& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Repo 'comb') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -PrefixoA:$($A.Prefixo) -PrefixoB:$($A.Prefixo) -PrefixoArbitro:$($A.Prefixo) -ProvedorB claude 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (código 4), nada criado no repo' { param($r) $codigo -eq 4 -and -not (Test-Path (Join-Path $c.Repo 'comb')) -and -not (git -C $c.Repo status --porcelain) } $null
 
 "== K11 (F5-01-R) SaidaDir da combinada é link/junction para dentro do repo"
 $c = Novo-Caso 'hold' $true; $A = LancadorEm $c 'A' 'escalar'; $alvo = Join-Path $c.Repo 'alvo'
 Novo-LinkPasta (Join-Path $c.Base 'comb-link') $alvo
-& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Base 'comb-link') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -PrefixoA $A.Prefixo -PrefixoB $A.Prefixo -PrefixoArbitro $A.Prefixo -ProvedorB claude 2>&1 | Out-Null
+& pwsh -NoProfile -File $Comb -RepoPath $c.Repo -TarefasPath $c.Tarefas -EstadoDir $c.Estado -SaidaDir (Join-Path $c.Base 'comb-link') -CmdA $A.Cmd -CmdB $A.Cmd -CmdArbitro $A.Cmd -PrefixoA:$($A.Prefixo) -PrefixoB:$($A.Prefixo) -PrefixoArbitro:$($A.Prefixo) -ProvedorB claude 2>&1 | Out-Null
 $codigo = $LASTEXITCODE
 Checar 'recusado (4), nada gravado no repo' { param($r) $codigo -eq 4 -and -not @(Get-ChildItem $alvo -Force).Count } $null
 
