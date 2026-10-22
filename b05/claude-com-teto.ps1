@@ -105,9 +105,19 @@ if (-not $lowil) {
     Sair-Erro "token de baixa integridade não criado: $msgTok"
   }
   $cmdline = B05LowIL-Cmdline $exe $argExec $inFile $outFile $errFile
+  # E84-03: ambiente HIGIENIZADO (lista branca). Sem B05_* (o executor nem sabe onde fica o razão), sem segredos da
+  # supervisora/OpenAI; TEMP e a config do Claude em pastas BAIXAS.
+  $manter = 'SystemRoot','windir','SystemDrive','ComSpec','PATH','PATHEXT','OS','NUMBER_OF_PROCESSORS','PROCESSOR_ARCHITECTURE','PROCESSOR_IDENTIFIER','PROCESSOR_LEVEL','PROCESSOR_REVISION','USERPROFILE','USERNAME','USERDOMAIN','HOMEDRIVE','HOMEPATH','COMPUTERNAME','PUBLIC','PROGRAMDATA','PROGRAMFILES','PROGRAMFILES(X86)','COMMONPROGRAMFILES','LOCALAPPDATA','APPDATA','SESSIONNAME','LANG'
+  $vars = @{}
+  foreach ($k in $manter) { $v = [Environment]::GetEnvironmentVariable($k); if ($null -ne $v) { $vars[$k] = $v } }
+  foreach ($e in Get-ChildItem Env:B05FAKE_* -ErrorAction SilentlyContinue) { $vars[$e.Name] = $e.Value }   # só testes
+  $vars['TEMP'] = $cTmp; $vars['TMP'] = $cTmp
+  if ($env:B05_BAIXO_CLAUDE) { $vars['CLAUDE_CONFIG_DIR'] = $env:B05_BAIXO_CLAUDE }
+  $vars.Remove('ANTHROPIC_API_KEY') | Out-Null
+  $blocoEnv = B05LowIL-BlocoAmbiente $vars
   $lpid = 0; $hProc = [IntPtr]::Zero
-  $msgLan = [B05LowIL]::Lancar($tok, $cmdline, (Get-Location).Path, [IntPtr]::Zero, [ref]$lpid, [ref]$hProc)
-  [B05LowIL]::Fechar($tok)
+  try { $msgLan = [B05LowIL]::Lancar($tok, $cmdline, (Get-Location).Path, $blocoEnv, [ref]$lpid, [ref]$hProc) }
+  finally { [System.Runtime.InteropServices.Marshal]::FreeHGlobal($blocoEnv); [B05LowIL]::Fechar($tok) }
   if ($msgLan) {
     try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = 0.0; custo_desconhecido = $false; motivo = 'falha_lancar_baixo'; codigo = -2 } } catch { }
     Sair-Erro "executor em baixa integridade não iniciou: $msgLan"

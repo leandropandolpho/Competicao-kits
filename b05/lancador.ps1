@@ -200,6 +200,17 @@ if ($BaixaIntegridade) {
   # A raiz ganhou um rótulo BAIXO herdável; .git não tinha rótulo próprio e passaria a HERDAR baixo (achado N18b/049).
   # Rótulo MÉDIO explícito em .git e em toda a sua subárvore sobrepõe a herança: o executor baixo não escreve lá.
   if (Test-Path -LiteralPath (Join-Path $RepoPath '.git')) { & icacls (Join-Path $RepoPath '.git') /setintegritylevel '(OI)(CI)medium' /T /Q 2>&1 | Out-Null }
+  # E84-03: NO_READ_UP nas pastas sensíveis — o executor baixo não LÊ razão, estado nem a chave da supervisora.
+  . (Join-Path $PSScriptRoot 'baixa-integridade.ps1')
+  foreach ($p in @($RazaoDir, $EstadoCan, (Join-Path $env:USERPROFILE '.supervisora'))) {
+    if (Test-Path -LiteralPath $p) { $mr = [B05LowIL]::RotularNRNW($p); if ($mr) { Parar 26 "falha ao proteger '$p' (NO_READ_UP): $mr" } }
+  }
+  # E84-03: cópia da config do Claude em nível BAIXO (o executor real precisa escrever sessão/cache; não toca em ~/.claude).
+  $cliHome = Join-Path $baixoDir 'clihome'; New-Item -ItemType Directory -Force $cliHome | Out-Null
+  if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.claude')) { Copy-Item (Join-Path $env:USERPROFILE '.claude\*') $cliHome -Recurse -Force -ErrorAction SilentlyContinue }
+  if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.claude.json')) { Copy-Item (Join-Path $env:USERPROFILE '.claude.json') (Join-Path $cliHome '.claude.json') -Force -ErrorAction SilentlyContinue }
+  & icacls $cliHome /setintegritylevel '(OI)(CI)low' /T /Q 2>&1 | Out-Null
+  $env:B05_BAIXO_CLAUDE = $cliHome
 }
 $env:PATH = "$PwshDir;$env:PATH"   # E76-02: "pwsh" pedido por qualquer descendente resolve para o portátil
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue

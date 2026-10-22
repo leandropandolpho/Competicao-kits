@@ -235,14 +235,19 @@ $r = Rodar-Lancador $a 3 'ok:0.30'
 $cont = Razao-Contabilizar (Eventos $a) 0.25; $est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
 Checar 'H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done' ($r.Codigo -eq 0 -and $cont.Base -eq 0.3 -and [math]::Abs([double]$est.custo_acumulado_usd - 0.6) -lt 1e-6 -and (Status $a) -eq 'T1=done T2=done') "código $($r.Codigo) base $($cont.Base) estado $($est.custo_acumulado_usd) $(Status $a) $($r.Saida)"
 
-"== N18b (E84-02/E84-03): executor em BAIXA integridade tenta subverter razão/liberação/.git → tudo negado; tarefa normal segue"
+"== N18b/N18e (E84-02/E84-03): executor em BAIXA integridade tenta subverter E LER razão/credencial/.git → tudo negado; tarefa normal segue"
 $a = Novo-Ambiente 1
+$cred = "$($a.Base)\segredo.key"; Set-Content $cred 'CHAVE-SECRETA'
+. (Join-Path $PSScriptRoot '../baixa-integridade.ps1'); [void][B05LowIL]::RotularNRNW($cred)   # credencial média NO_READ_UP
+$env:B05FAKE_RAZAO = $a.Razao; $env:B05FAKE_CRED = $cred
 $r = Rodar-Lancador $a 3 'atacar' @('-BaixaIntegridade')
+Remove-Item Env:B05FAKE_RAZAO, Env:B05FAKE_CRED
 $ev = Eventos $a; $pidEv = @($ev | Where-Object evento -eq 'pid')
 $ataque = if (Test-Path "$($a.Repo)\ataque.txt") { Get-Content "$($a.Repo)\ataque.txt" -Raw } else { '(sem arquivo)' }
 $cfgRest = @(Get-ChildItem "$($a.Razao)\config-*.json" -ErrorAction SilentlyContinue)
 Checar 'N18b: executor registrado em baixa integridade (nivel_il 4096)' ($pidEv.Count -eq 1 -and [int]$pidEv[0].nivel_il -eq 4096) "nivel $($pidEv.nivel_il)"
-Checar 'N18b: todas as 5 tentativas de subversão NEGADAS' ($ataque -notmatch '=OK') $ataque
+Checar 'N18b/N18e: TODAS as tentativas (subverter E ler) NEGADAS' ($ataque -notmatch '=OK') $ataque
+Checar 'N18e: credencial e razão não lidos; ambiente sem segredos (sem vars vazadas)' ($ataque -match 'credencial_ler=NEGADO' -and $ataque -match 'razao_ler=NEGADO' -and $ataque -match 'vars_vazadas=NEGADO') $ataque
 Checar 'N18b: razão sem evento forjado e sem LIBERACAO_HUMANA' (-not @($ev | Where-Object evento -eq 'forjado').Count -and -not (Test-Path "$($a.Razao)\LIBERACAO_HUMANA.txt")) 'razão subvertido'
 Checar 'N18b: config-<execucao>.json preservado' ($cfgRest.Count -eq 1)
 Checar 'N18b: .git intacto (sem hook plantado, sem [x] no config)' (-not (Test-Path "$($a.Repo)\.git\hooks\pre-commit") -and (Get-Content "$($a.Repo)\.git\config" -Raw) -notmatch '\[x\]')

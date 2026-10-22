@@ -27,8 +27,26 @@ public static class B05LowIL {
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr h, uint c);
   [DllImport("kernel32.dll")] static extern bool IsProcessInJob(IntPtr p, IntPtr job, out bool r);
+  [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string s, uint rev, out IntPtr sd, out uint sz);
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetSecurityDescriptorSacl(IntPtr sd, out bool present, out IntPtr sacl, out bool deflt);
+  [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern uint SetNamedSecurityInfoW(string name, int type, uint info, IntPtr owner, IntPtr grp, IntPtr dacl, IntPtr sacl);
+  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr p);
   const uint DISABLE_MAX_PRIVILEGE = 0x1;
   public static bool EmJob(IntPtr h) { bool r; return IsProcessInJob(h, IntPtr.Zero, out r) && r; }
+
+  // E84-03: rótulo de integridade MÉDIO com NO_WRITE_UP + NO_READ_UP + NO_EXECUTE_UP (SDDL "S:(ML;OICI;NRNWNX;;;ME)"),
+  // herdável. Processos abaixo de médio não leem/escrevem/executam o alvo. Médio+ continuam normais. Não exige admin.
+  // type: SE_FILE_OBJECT=1. info: LABEL_SECURITY_INFORMATION=0x10. Devolve "" ou erro.
+  public static string RotularNRNW(string caminho) {
+    IntPtr sd; uint sz;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW("S:(ML;OICI;NRNWNX;;;ME)", 1, out sd, out sz)) return "ConvertSD " + Marshal.GetLastWin32Error();
+    try {
+      bool pres, def; IntPtr sacl;
+      if (!GetSecurityDescriptorSacl(sd, out pres, out sacl, out def) || !pres) return "GetSacl " + Marshal.GetLastWin32Error();
+      uint rc = SetNamedSecurityInfoW(caminho, 1, 0x10, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, sacl);
+      return rc == 0 ? "" : ("SetNamedSecurityInfo " + rc);
+    } finally { LocalFree(sd); }
+  }
 
   // Token de baixa integridade + restrito (sem privilégios). Devolve "" ou a mensagem de erro.
   public static string CriarToken(out IntPtr tokenBaixo) {
