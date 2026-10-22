@@ -235,22 +235,23 @@ $r = Rodar-Lancador $a 3 'ok:0.30'
 $cont = Razao-Contabilizar (Eventos $a) 0.25; $est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
 Checar 'H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done' ($r.Codigo -eq 0 -and $cont.Base -eq 0.3 -and [math]::Abs([double]$est.custo_acumulado_usd - 0.6) -lt 1e-6 -and (Status $a) -eq 'T1=done T2=done') "código $($r.Codigo) base $($cont.Base) estado $($est.custo_acumulado_usd) $(Status $a) $($r.Saida)"
 
-"== N19: custo inválido do executor (negativo, texto, não finito) → desconhecido, reserva conservada"
+"== N19-R (E84-01): custo inválido rejeitado ANTES do controlador — sem commit, reserva mantida, trava financeira, parada determinística"
 foreach ($caso in @(@('negativo', '{"type":"result","is_error":false,"result":"x","total_cost_usd":-5}'),
                     @('texto', '{"type":"result","is_error":false,"result":"x","total_cost_usd":"0.3"}'),
                     @('nao_finito', '{"type":"result","is_error":false,"result":"x","total_cost_usd":1e999}'))) {
+  # 2 tentativas: a 1ª invoca o executor (custo inválido → trava); a 2ª cai na trava e NÃO invoca o executor.
   $a = Novo-Ambiente 1; $env:B05FAKE_SAIDA = $caso[1]
-  $r = Rodar-Lancador $a 3 'cru'
-  $ev = Eventos $a; $f = @($ev | Where-Object evento -eq 'fim'); $cont = Razao-Contabilizar $ev 0.25
-  Checar "$($caso[0]): fim com custo desconhecido, reserva 0.625 conservada, conhecido 0" ($f.Count -eq 1 -and $f[0].custo_desconhecido -eq $true -and [math]::Abs($cont.Reservado - 0.625) -lt 1e-6 -and $cont.Conhecido -eq 0) "fim $($f | ConvertTo-Json -Compress) reservado $($cont.Reservado) conhecido $($cont.Conhecido)"
-  $n0 = [int](Get-Content "$($a.Fake)\chamadas.txt" -Raw)
-  if ($r.Codigo -eq 28) {
-    $r2 = Rodar-Lancador $a 3 'ok:0.30'
-    Checar "$($caso[0]): controlador contabilizou outro valor → 28 (fecha), partida seguinte também 28 sem chamar o executor" ($r2.Codigo -eq 28 -and [int](Get-Content "$($a.Fake)\chamadas.txt" -Raw) -eq $n0) "segunda: $($r2.Codigo)"
-  } else {
-    $est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
-    Checar "$($caso[0]): lançador $($r.Codigo) e estado reconciliado (estado = B + K)" ([math]::Abs([double]$est.custo_acumulado_usd - ($cont.Base + $cont.Conhecido)) -lt 1e-6) "estado $($est.custo_acumulado_usd)"
-  }
+  $base0 = git -C $a.Repo rev-parse HEAD
+  $r = Rodar-Lancador $a 3 'cru' @() 2
+  $ev = Eventos $a; $cont = Razao-Contabilizar $ev 0.25
+  $f = @($ev | Where-Object evento -eq 'fim')
+  $tf = @($ev | Where-Object evento -eq 'trava_financeira'); $eb = @($ev | Where-Object evento -eq 'evidencia_bruta')
+  $chamadas = [int](Get-Content "$($a.Fake)\chamadas.txt" -Raw)
+  Checar "$($caso[0]): executor invocado 1 vez (2ª tentativa travou antes de invocar)" ($chamadas -eq 1) "chamadas $chamadas"
+  Checar "$($caso[0]): fim desconhecido+invalido, reserva 0.625, conhecido 0" ($f.Count -eq 1 -and $f[0].custo_desconhecido -eq $true -and $f[0].custo_invalido -eq $true -and [math]::Abs($cont.Reservado - 0.625) -lt 1e-6 -and $cont.Conhecido -eq 0) "fim $($f | ConvertTo-Json -Compress) reservado $($cont.Reservado)"
+  Checar "$($caso[0]): trava_financeira + evidencia_bruta gravadas" ($tf.Count -ge 1 -and $eb.Count -ge 1) "trava $($tf.Count) evidencia $($eb.Count)"
+  Checar "$($caso[0]): SEM commit (HEAD intacto, notas.txt = base)" ((git -C $a.Repo rev-parse HEAD) -eq $base0 -and (Get-Content "$($a.Repo)\notas.txt" -Raw).Trim() -eq 'base') "head $((git -C $a.Repo rev-parse HEAD)) notas $((Get-Content "$($a.Repo)\notas.txt" -Raw).Trim())"
+  Checar "$($caso[0]): T1 failed e estado reconciliado (estado = B + K, sem custo inválido)" ((Status $a) -eq 'T1=failed' -and [math]::Abs([double]((Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json).custo_acumulado_usd) - ($cont.Base + $cont.Conhecido)) -lt 1e-6) "status $(Status $a)"
 }
 Remove-Item Env:B05FAKE_SAIDA
 

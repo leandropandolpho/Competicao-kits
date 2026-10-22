@@ -36,6 +36,11 @@ try {
   if (-not $obtida) { Sair-Erro 'trava do razão não obtida em 60 s' }
   $r = Razao-Ler $dir
   if (-not $r.Ok) { Sair-Erro "razão ilegível: $($r.Motivo)" }
+  # E84-01: trava financeira durável. Depois de uma resposta com custo inválido, nenhuma chamada da MESMA execução
+  # volta a invocar o executor — falha fecha em 28 sem gastar nada.
+  if (@($r.Eventos | Where-Object { $_.evento -eq 'trava_financeira' -and "$($_.execucao)" -eq $execucao }).Count) {
+    Sair-Erro 'trava financeira ativa: resposta anterior do executor trouxe custo inválido; execução bloqueada' 28
+  }
   $c = Razao-Contabilizar $r.Eventos $folga
   if ($c.Total + $teto * (1 + $folga) -gt $orc) {
     try { Razao-Gravar $dir @{ evento = 'bloqueado'; execucao = "$($cfg.execucao)"; motivo = 'orcamento'; gasto_contabilizado = $c.Total; orcamento_usd = $orc } } catch { }
@@ -91,19 +96,33 @@ $p.WaitForExit()
 $saida = $out.Result; $erro = $err.Result; $codigo = $p.ExitCode
 $custo = $null
 $custoBruto = $null
+$custoPresente = $false
+$custoInvalido = $false
 try {
   $j = $saida.Trim() | ConvertFrom-Json
   if ($j.PSObject.Properties['total_cost_usd']) {
+    $custoPresente = $true
     $v = $j.total_cost_usd; $custoBruto = "$v"
-    # B05-F07: só número JSON finito e não negativo vira custo conhecido. Texto, nulo, negativo ou não finito ⇒ desconhecido
-    # (a reserva fica). A saída do executor segue intacta para o controlador; se ele contabilizar outro valor, a
-    # reconciliação (estado = B + K) diverge e o lançador fecha com 28.
+    # B05-F07: só número JSON finito e não negativo vira custo conhecido. Texto, nulo, negativo ou não finito = INVÁLIDO.
     if ($v -is [double] -or $v -is [long] -or $v -is [int] -or $v -is [decimal]) {
       $d = [double]$v
-      if ([double]::IsFinite($d) -and $d -ge 0) { $custo = $d }
-    }
+      if ([double]::IsFinite($d) -and $d -ge 0) { $custo = $d } else { $custoInvalido = $true }
+    } else { $custoInvalido = $true }
   }
 } catch { }
+
+# E84-01 (B05-F07-R): resposta COM campo de custo presente mas inválido NÃO pode chegar ao controlador como resultado
+# normal (ele contabilizaria e comitaria antes de o lançador fechar em 28). Rejeição PRÉVIA: grava evidência bruta +
+# 'fim' desconhecido (reserva mantida) + trava financeira durável, e devolve ERRO controlado (exit 28, is_error) ao
+# controlador, que faz rollback sem rodar teste e sem comitar. A próxima chamada da execução já cai na trava (acima).
+# (Custo AUSENTE continua sendo 'semcusto' legítimo — não é violação.)
+if ($custoInvalido) {
+  try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = $null; custo_desconhecido = $true; custo_bruto = $custoBruto; custo_invalido = $true; codigo = $codigo } } catch { }
+  try { Razao-Gravar $dir @{ evento = 'evidencia_bruta'; id = $id; execucao = $execucao; saida = ($saida.Substring(0, [Math]::Min(4000, $saida.Length))) } } catch { }
+  try { Razao-Gravar $dir @{ evento = 'trava_financeira'; id = $id; execucao = $execucao; motivo = 'custo_invalido'; custo_bruto = $custoBruto } } catch { }
+  Sair-Erro "custo inválido na resposta do executor ($custoBruto): reserva mantida, execução travada (28)" 28
+}
+
 try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = $custo; custo_desconhecido = ($null -eq $custo); custo_bruto = $custoBruto; codigo = $codigo } } catch { }
 [Console]::Out.Write($saida)
 if ($erro) { [Console]::Error.Write($erro) }
