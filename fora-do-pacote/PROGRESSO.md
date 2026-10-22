@@ -15,3 +15,4 @@ Regra: o projeto total só recua com regressão real de trabalho, registrada aqu
 | 083 | B-05 — contrato v3.2 (F06) submetido | 82% | 92% | 66/66 com F07, conhost, F08; sonda de baixa integridade viável |
 | 087 | E84-01 validada (75/75); sonda Low IL | 83% | 92% | custo inválido rejeitado antes do controlador |
 | 088 | sonda Low IL decisiva VERDE | 84% | 92% | Claude real completa tarefa em baixa integridade (041 inconclusiva por bug $pid + falta de --settings; 042 corrigida: arquivo editado, is_error=false) |
+| 089 | E84-01+E84-02+G2 implementadas | 86% | 93% | bateria 81/81 (050): N18b nega 5 subversões do executor em baixa integridade (razão, liberação, config, hook e config do .git), tarefa normal completa e comita; achados corrigidos: máscara do token (ADJUST_DEFAULT), $args automático, cmd /s, .git médio explícito |
