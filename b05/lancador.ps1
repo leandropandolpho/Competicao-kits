@@ -197,6 +197,9 @@ if ($BaixaIntegridade) {
   # (o executor não planta hooks nem reescreve histórico; o controlador médio continua escrevendo por write-down).
   Get-ChildItem -LiteralPath $RepoPath -Force | Where-Object Name -ne '.git' | ForEach-Object { & icacls $_.FullName /setintegritylevel '(OI)(CI)low' /T /Q 2>&1 | Out-Null }
   & icacls $RepoPath /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
+  # A raiz ganhou um rótulo BAIXO herdável; .git não tinha rótulo próprio e passaria a HERDAR baixo (achado N18b/049).
+  # Rótulo MÉDIO explícito em .git e em toda a sua subárvore sobrepõe a herança: o executor baixo não escreve lá.
+  if (Test-Path -LiteralPath (Join-Path $RepoPath '.git')) { & icacls (Join-Path $RepoPath '.git') /setintegritylevel '(OI)(CI)medium' /T /Q 2>&1 | Out-Null }
 }
 $env:PATH = "$PwshDir;$env:PATH"   # E76-02: "pwsh" pedido por qualquer descendente resolve para o portátil
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
