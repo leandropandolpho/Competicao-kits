@@ -180,6 +180,7 @@ public static class B05Job {
   // VERIFICAÇÃO (não associa nada): descendentes vivos cujo pai está rastreado. Um PID só entra em Verificados
   // depois de IsProcessInJob = true (H5). Devolve as violações: "pid|nome|pai|motivo".
   public static HashSet<uint> Verificados = new HashSet<uint>();
+  public static HashSet<uint> PreExistentes = new HashSet<uint>();   // conhost criado pelo Windows ANTES do lançador entrar no job
   public static List<string> Verificar(IntPtr job) {
     var viol = new List<string>();
     IntPtr snap = CreateToolhelp32Snapshot(2, 0);
@@ -192,7 +193,7 @@ public static class B05Job {
     while (mudou) {
       mudou = false;
       foreach (var p in lista) {
-        if (Verificados.Contains(p.th32ProcessID) || !Verificados.Contains(p.th32ParentProcessID)) continue;
+        if (Verificados.Contains(p.th32ProcessID) || PreExistentes.Contains(p.th32ProcessID) || !Verificados.Contains(p.th32ParentProcessID)) continue;
         IntPtr h = OpenProcess(0x1000 | 0x00100000, false, p.th32ProcessID);   // QUERY_LIMITED_INFORMATION | SYNCHRONIZE
         if (h == IntPtr.Zero) {
           int err = Marshal.GetLastWin32Error();
@@ -253,6 +254,15 @@ if (-not $ok) { Parar 24 "AssignProcessToJobObject falhou ($([Runtime.InteropSer
 $dentro = $false
 if (-not [B05Job]::IsProcessInJob($eu, $job, [ref]$dentro) -or -not $dentro) { Parar 24 'o lançador não está no job após a associação' }
 
+# Filhos do lançador que já existiam antes da associação: só o conhost.exe que o Windows cria quando o lançador nasce
+# sem console herdado. Ele não descende do controlador; é registrado e ignorado pela verificação. Qualquer outro ⇒ 24.
+$pre = @([B05Job]::Subarvore([System.Collections.Generic.HashSet[uint32]]::new([uint32[]]@([uint32]$PID))))
+foreach ($x in $pre) {
+  $pp = $x -split '\|'
+  if ($pp[1] -ne 'conhost.exe' -or [uint32]$pp[2] -ne [uint32]$PID) { Parar 24 "processo pré-existente inesperado sob o lançador: $x" }
+  [void][B05Job]::PreExistentes.Add([uint32]$pp[0])
+}
+
 # ---------------- H6: configuração imutável por execução; partida do controlador ----------------
 $execucao = [guid]::NewGuid().ToString('N')
 $cfg = [ordered]@{ execucao = $execucao; orcamento_usd = $OrcamentoUsd; teto_chamada_usd = $TetoChamadaUsd; folga = $Folga
@@ -272,7 +282,7 @@ foreach ($a in @('-NoProfile', '-File', $ControladorPath, '-RepoPath', $RepoPath
 $psi.UseShellExecute = $false
 $ctl = [System.Diagnostics.Process]::Start($psi)
 try { $criacaoCtl = $ctl.StartTime.ToUniversalTime().ToString('o') } catch { $criacaoCtl = (Get-Date).ToUniversalTime().ToString('o') }
-Razao-Gravar $RazaoDir @{ evento = 'controlador'; id = 'ctl'; execucao = $execucao; pid = $ctl.Id; criacao = $criacaoCtl; versao_claude = "$v"; flags_job = ('0x{0:X}' -f $fl); pwsh = $PwshProprio }
+Razao-Gravar $RazaoDir @{ evento = 'controlador'; id = 'ctl'; execucao = $execucao; pid = $ctl.Id; criacao = $criacaoCtl; versao_claude = "$v"; flags_job = ('0x{0:X}' -f $fl); pwsh = $PwshProprio; preexistentes = @($pre) }
 
 # ---------------- H3/H4/E76-01: verificação contínua; falha fechada ----------------
 [void][B05Job]::Verificados.Add([uint32]$PID)
