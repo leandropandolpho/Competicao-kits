@@ -164,9 +164,11 @@ if (-not [B05Job]::IsProcessInJob($eu, $job, [ref]$dentro) -or -not $dentro) { P
 # Ressalva do Ato 081: a dispensa exige, por processo, (1) pai = lançador, (2) caminho = %SystemRoot%\System32\conhost.exe,
 # (3) criação entre a criação do lançador e o instante da associação (prova de que já existia; afasta PID reutilizado).
 . (Join-Path $PSScriptRoot 'dispensa.ps1')
-$criacaoLanc = (Get-Process -Id $PID).StartTime.ToUniversalTime().ToFileTimeUtc()
+[B05Job]::Rastrear([uint32]$PID)   # identidade do lançador = PID + criação (snapshot)
+$criacaoLanc = [B05Job]::Verificados[[uint32]$PID]
+$raizL = [System.Collections.Generic.Dictionary[uint32, long]]::new(); $raizL[[uint32]$PID] = $criacaoLanc
 $pre = [System.Collections.Generic.List[object]]::new()
-foreach ($x in @([B05Job]::Subarvore([System.Collections.Generic.HashSet[uint32]]::new([uint32[]]@([uint32]$PID))))) {
+foreach ($x in @([B05Job]::Subarvore($raizL))) {
   $pp = $x -split '\|'
   $d = Testar-Dispensa ([uint32]$pp[0]) ([uint32]$pp[2]) ([uint32]$PID) $criacaoLanc $instanteAssoc
   if (-not $d.Ok) { Parar 24 "processo pré-existente sob o lançador não qualificado para dispensa: $x ($($d.Motivo))" }
@@ -196,13 +198,12 @@ try { $criacaoCtl = $ctl.StartTime.ToUniversalTime().ToString('o') } catch { $cr
 Razao-Gravar $RazaoDir @{ evento = 'controlador'; id = 'ctl'; execucao = $execucao; pid = $ctl.Id; criacao = $criacaoCtl; versao_claude = "$v"; flags_job = ('0x{0:X}' -f $fl); pwsh = $PwshProprio; preexistentes = @($pre); associacao_utc = [DateTime]::FromFileTimeUtc($instanteAssoc).ToString('o') }
 
 # ---------------- H3/H4/E76-01: verificação contínua; falha fechada ----------------
-[void][B05Job]::Verificados.Add([uint32]$PID)
 $dctl = $false; [void][B05Job]::IsProcessInJob($ctl.Handle, $job, [ref]$dctl)
 if (-not $dctl) {
-  Razao-Gravar $RazaoDir @{ evento = 'contencao_violada'; execucao = $execucao; violacoes = @("$($ctl.Id)|controlador|$PID|fora do job") }
+  Razao-Gravar $RazaoDir @{ evento = 'contencao_violada'; execucao = $execucao; violacoes = @("$($ctl.Id)|controlador|$PID|0|fora do job") }
   [void][B05Job]::TerminateJobObject($job, 29); exit 29
 }
-[void][B05Job]::Verificados.Add([uint32]$ctl.Id)
+[B05Job]::Rastrear([uint32]$ctl.Id)
 $ultimo = ''; $tick = 0
 while (-not $ctl.HasExited) {
   $viol = [B05Job]::Verificar($job)
@@ -210,14 +211,16 @@ while (-not $ctl.HasExited) {
     # 1) registro durável ANTES de encerrar  2) encerra os externos e registra  3) encerra o job (inclusive este lançador)
     Razao-Gravar $RazaoDir @{ evento = 'contencao_violada'; execucao = $execucao; violacoes = @($viol) }
     # Encerra os externos e, em até 5 passadas, os descendentes deles (inclusive os criados entre um snapshot e outro).
-    $alvos = [System.Collections.Generic.HashSet[uint32]]::new()
-    foreach ($x in $viol) { $pv = [uint32]0; if ([uint32]::TryParse(($x -split '\|')[0], [ref]$pv) -and $pv -ne 0) { [void]$alvos.Add($pv) } }
+    # Identidade de cada alvo = PID + criação: nunca se encerra um processo alheio que herdou o PID.
+    $alvos = [System.Collections.Generic.Dictionary[uint32, long]]::new()
+    foreach ($x in $viol) { $pp = $x -split '\|'; $pv = [uint32]0; $cv = [long]0
+      if ([uint32]::TryParse($pp[0], [ref]$pv) -and $pv -ne 0 -and [long]::TryParse($pp[3], [ref]$cv) -and $cv -gt 0) { $alvos[$pv] = $cv } }
     $res = [System.Collections.Generic.List[string]]::new()
-    foreach ($pv in @($alvos)) { $res.Add("$pv|externo|$([B05Job]::Encerrar($pv))") }
+    foreach ($kv in @($alvos.GetEnumerator())) { $res.Add("$($kv.Key)|externo|$([B05Job]::Encerrar($kv.Key, $kv.Value))") }
     for ($pass = 0; $pass -lt 5; $pass++) {
-      $novos = @([B05Job]::Subarvore($alvos) | Where-Object { -not $alvos.Contains([uint32](($_ -split '\|')[0])) })
+      $novos = @([B05Job]::Subarvore($alvos) | Where-Object { -not $alvos.ContainsKey([uint32](($_ -split '\|')[0])) })
       if (-not $novos.Count) { break }
-      foreach ($x in $novos) { $pv = [uint32](($x -split '\|')[0]); [void]$alvos.Add($pv); $res.Add("$x|descendente de externo|$([B05Job]::Encerrar($pv))") }
+      foreach ($x in $novos) { $pp = $x -split '\|'; $alvos[[uint32]$pp[0]] = [long]$pp[3]; $res.Add("$x|descendente de externo|$([B05Job]::Encerrar([uint32]$pp[0], [long]$pp[3]))") }
     }
     try { Razao-Gravar $RazaoDir @{ evento = 'externos_encerramento'; execucao = $execucao; resultados = @($res) } } catch { }
     [void][B05Job]::TerminateJobObject($job, 29)
