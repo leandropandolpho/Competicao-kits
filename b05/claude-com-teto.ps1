@@ -1,7 +1,8 @@
-# claude-com-teto.ps1 — embrulho do executor (B-05, contrato v2). Chamado pelo controlador congelado via
-# claude-com-teto.cmd, no lugar do "claude". Antes de CADA chamada: trava → reconcilia o razão → reserva
-# (inicio durável) → inicia o executor com --max-budget-usd → registra pid+criação → registra fim.
-# Configuração: variável B05_DIR (pasta do razão, definida pelo lançador) com config.json.
+# claude-com-teto.ps1 — embrulho do executor (B-05, contrato v3.1). Chamado pelo controlador congelado via
+# claude-com-teto.cmd (que usa o pwsh portátil de B05_PWSH), no lugar do "claude". Antes de CADA chamada:
+# trava → reconcilia o razão → admissão B+K+R+T(1+F) ≤ M → reserva (inicio durável) → executor com
+# --max-budget-usd → pid+criação obrigatórios (H10) → fim.
+# Configuração imutável por execução (H6): B05_DIR/config-<B05_EXECUCAO>.json.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -14,9 +15,12 @@ function Sair-Erro([string]$msg, [int]$codigo = 1) {
   exit $codigo
 }
 
-$dir = $env:B05_DIR
-if (-not $dir -or -not (Test-Path -LiteralPath (Join-Path $dir 'config.json'))) { Sair-Erro 'B05_DIR/config.json ausente' }
-$cfg = Get-Content -LiteralPath (Join-Path $dir 'config.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$dir = $env:B05_DIR; $execucao = $env:B05_EXECUCAO
+if (-not $dir -or -not $execucao -or $execucao -notmatch '^[0-9a-f]{32}$') { Sair-Erro 'B05_DIR ou B05_EXECUCAO ausente/inválido' }
+$arqCfg = Join-Path $dir "config-$execucao.json"
+if (-not (Test-Path -LiteralPath $arqCfg)) { Sair-Erro "configuração da execução ausente: config-$execucao.json" }
+$cfg = Get-Content -LiteralPath $arqCfg -Raw -Encoding utf8 | ConvertFrom-Json
+if ("$($cfg.execucao)" -ne $execucao) { Sair-Erro 'configuração não corresponde à execução' }
 $teto = [double]$cfg.teto_chamada_usd; $folga = [double]$cfg.folga; $orc = [double]$cfg.orcamento_usd
 $entrada = if ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() } else { '' }
 
@@ -35,7 +39,7 @@ try {
   $c = Razao-Contabilizar $r.Eventos $folga
   if ($c.Total + $teto * (1 + $folga) -gt $orc) {
     try { Razao-Gravar $dir @{ evento = 'bloqueado'; execucao = "$($cfg.execucao)"; motivo = 'orcamento'; gasto_contabilizado = $c.Total; orcamento_usd = $orc } } catch { }
-    Sair-Erro "orçamento insuficiente (contabilizado US$ $($c.Total) + reserva $([math]::Round($teto * (1 + $folga), 4)) > US$ $orc)"
+    Sair-Erro "orçamento insuficiente (base $($c.Base) + conhecido $($c.Conhecido) + reservado $($c.Reservado) = US$ $($c.Total) + reserva $([math]::Round($teto * (1 + $folga), 4)) > US$ $orc)"
   }
   try { Razao-Gravar $dir @{ evento = 'inicio'; id = $id; execucao = "$($cfg.execucao)"; teto_usd = $teto; folga = $folga } }
   catch { Sair-Erro "falha ao gravar a reserva no razão: $($_.Exception.Message)" }
@@ -66,7 +70,21 @@ if ($IsWindows) {
     $r0 = $false; if ([B05.Proc]::IsProcessInJob($p.Handle, [IntPtr]::Zero, [ref]$r0)) { $emJob = $r0 }
   } catch { }
 }
-try { Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = "$($cfg.execucao)"; pid = $p.Id; criacao = $criacao; em_job = $emJob; argumentos = @($psi.ArgumentList) } } catch { }
+# H10: o evento pid é obrigatório. Sem ele, o executor é morto (com a árvore), a reserva fica (sem 'fim') e a chamada falha.
+try {
+  if ($env:B05_TESTE_FALHAR_PID -eq '1') { throw 'falha de gravação injetada (teste N15)' }
+  Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = $execucao; pid = $p.Id; criacao = $criacao; em_job = $emJob; argumentos = @($psi.ArgumentList) }
+} catch {
+  $msg = $_.Exception.Message
+  try { $p.Kill($true) } catch { }
+  try { $p.WaitForExit(10000) | Out-Null } catch { }
+  Sair-Erro "falha ao gravar o pid no razão ($msg): executor encerrado, reserva mantida" 3
+}
+# Defesa adicional: executor fora de job ⇒ não segue (o lançador também detecta e encerra tudo).
+if ($IsWindows -and $emJob -ne $true) {
+  try { $p.Kill($true) } catch { }
+  Sair-Erro "executor fora do Job Object (em_job=$emJob): encerrado, reserva mantida" 4
+}
 $out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
 try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b, 0, $b.Length); $p.StandardInput.Close() } catch { }
 $p.WaitForExit()

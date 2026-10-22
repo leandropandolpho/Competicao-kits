@@ -1,5 +1,6 @@
-# razao.ps1 — razão de custos do B-05 (contrato v2, Ato 072). Usado pelo embrulho e pelo lançador.
-# Formato: JSON Lines em <RazaoDir>/razao.jsonl. Eventos: inicio, pid, fim, bloqueado, controlador, membros_job.
+# razao.ps1 — razão de custos do B-05 (contrato v3.1, Atos 075–077). Usado pelo embrulho e pelo lançador.
+# Formato: JSON Lines em <RazaoDir>/razao.jsonl. Eventos: base_historica, inicio, pid, fim, bloqueado, controlador,
+# membros_job, contencao_violada, externos_encerramento, liberacao_humana, divergencia_reconciliacao.
 # Regras: desconhecido nunca vira zero (C4); reserva só cai com 'fim' de custo conhecido do mesmo id (C6);
 # razão ilegível bloqueia (E4).
 
@@ -45,9 +46,11 @@ function Razao-Ler([string]$dir) {
 function Razao-Contabilizar($eventos, [double]$folga) {
   # Soma por chamada (id): fim com custo conhecido → custo; fim desconhecido ou inicio sem fim → teto × (1+folga);
   # fim de falha comprovadamente anterior à invocação → 0 conhecido.
-  $ini = @{}; $fim = @{}
+  # E76-04: a base histórica (gravada uma única vez) entra no total: Total = B + K + R.
+  $ini = @{}; $fim = @{}; $base = 0.0; $nb = 0
   foreach ($e in $eventos) {
-    if ($e.evento -eq 'inicio') { $ini["$($e.id)"] = $e }
+    if ($e.evento -eq 'base_historica') { $nb++; if ($nb -eq 1) { $base = [double]$e.valor_usd } }
+    elseif ($e.evento -eq 'inicio') { $ini["$($e.id)"] = $e }
     elseif ($e.evento -eq 'fim') { $fim["$($e.id)"] = $e }
   }
   $conhecido = 0.0; $reservado = 0.0; $abertas = @()
@@ -59,8 +62,8 @@ function Razao-Contabilizar($eventos, [double]$folga) {
       else { $reservado += $teto * (1 + $folga) }
     } else { $reservado += $teto * (1 + $folga); $abertas += $id }
   }
-  return @{ Conhecido = [math]::Round($conhecido, 6); Reservado = [math]::Round($reservado, 6)
-            Total = [math]::Round($conhecido + $reservado, 6); Abertas = $abertas }
+  return @{ Base = [math]::Round($base, 6); BasesGravadas = $nb; Conhecido = [math]::Round($conhecido, 6); Reservado = [math]::Round($reservado, 6)
+            Total = [math]::Round($base + $conhecido + $reservado, 6); Abertas = $abertas }
 }
 
 function Para-Utc($v) {

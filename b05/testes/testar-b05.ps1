@@ -1,9 +1,11 @@
-# testar-b05.ps1 — cenários determinísticos do B-05 no Windows, com executor SIMULADO (sem custo real).
-# Cobre N3, N4 (+ PID reutilizado), N5, N1/N2/N6 (com simulado), N7, N8, N9, N10.
-# Uso: pwsh -NoProfile -File b05/testes/testar-b05.ps1 -ControladorPath <kits/kit-A/controlador.ps1> -SettingsPath <kits/kit-A/.claude/settings.json>
-param([Parameter(Mandatory)][string]$ControladorPath, [Parameter(Mandatory)][string]$SettingsPath)
+# testar-b05.ps1 — cenários determinísticos do B-05 (contrato v3.1) no Windows, com executor SIMULADO (sem custo real).
+# Cobre N1–N17 (exceto N1r, que usa Claude real e roda à parte), E4.
+# Uso (com o pwsh PORTÁTIL): <pwsh portátil> -NoProfile -File b05/testes/testar-b05.ps1 -ControladorPath <kits/kit-A/controlador.ps1> -SettingsPath <kits/kit-A/.claude/settings.json>
+param([Parameter(Mandatory)][string]$ControladorPath, [Parameter(Mandatory)][string]$SettingsPath,
+      [string]$PwshLoja = "$env:LOCALAPPDATA\Microsoft\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe")
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { 'Os testes do B-05 exigem Windows (Job Object).'; exit 2 }
+if ((Get-Process -Id $PID).Path -match '\\WindowsApps\\') { 'Rode os testes com o pwsh PORTÁTIL.'; exit 2 }
 $Lanc = (Resolve-Path (Join-Path $PSScriptRoot '../lancador.ps1')).Path
 $Fake = (Resolve-Path (Join-Path $PSScriptRoot 'fake-executor.ps1')).Path
 . (Join-Path $PSScriptRoot '../razao.ps1')
@@ -42,6 +44,16 @@ function Iniciar-Lancador($a, [double]$orc, [string]$modo, [int]$tent = 1) {
   return [System.Diagnostics.Process]::Start($psi)
 }
 function Eventos($a) { (Razao-Ler $a.Razao).Eventos }
+function Canon([string]$p) { [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $p).ProviderPath).TrimEnd('\') }
+function Vincular($a) {
+  # Cria o vínculo como o lançador faria (para cenários que precisam de razão pré-preenchido).
+  $id = [guid]::NewGuid().ToString('N'); $ts = (Get-Date).ToString('o')
+  Razao-Gravar $a.Razao @{ evento = 'base_historica'; valor_usd = 0.0; vinculo = $id }
+  [IO.File]::WriteAllText("$($a.Razao)\vinculo.json", ([ordered]@{ id = $id; estado_dir = (Canon $a.Estado); criado_em = $ts } | ConvertTo-Json))
+  [IO.File]::WriteAllText("$($a.Estado)\b05-vinculo.json", ([ordered]@{ id = $id; razao_dir = (Canon $a.Razao); criado_em = $ts } | ConvertTo-Json))
+}
+function Hash-Pasta([string]$d) { (@(Get-ChildItem -LiteralPath $d -File | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName).Hash)" }) -join ';') }
+function Vivos-Ping117 { @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object { $_.CommandLine -match '-n 117' }) }
 function Status($a) { @((Get-Content $a.Tarefas -Raw | ConvertFrom-Json).tarefas | ForEach-Object { "$($_.id)=$($_.status)" }) -join ' ' }
 
 "== N7 + N8: chamada normal pelo controlador congelado"
@@ -84,7 +96,7 @@ $r = Rodar-Lancador $a 3 'ok:0.30' @('-TesteHandleHerdavel')
 Checar 'handle herdável → código 24, controlador não iniciou' ($r.Codigo -eq 24 -and -not (Test-Path "$($a.Estado)\estado.json")) "código $($r.Codigo) $($r.Saida)"
 
 "== N4: processo antigo vivo (PID + criação) e PID reutilizado"
-$a = Novo-Ambiente 1
+$a = Novo-Ambiente 1; Vincular $a
 $sent = Start-Process $Pw -ArgumentList '-NoProfile', '-Command', 'Start-Sleep 120' -PassThru -WindowStyle Hidden
 Start-Sleep 1
 Razao-Gravar $a.Razao @{ evento = 'pid'; id = 'antigo'; pid = $sent.Id; criacao = $sent.StartTime.ToUniversalTime().ToString('o') }
@@ -114,7 +126,7 @@ Stop-Process -Id $l1.Id -Force
 Start-Sleep 5
 Checar 'N1: executor morto em ≤ 5 s (PID + criação)' (-not (Processo-Vivo ([int]$pidEx.pid) $pidEx.criacao))
 Checar 'N1: controlador morto' (-not (Processo-Vivo ([int]$ctlEv.pid) $ctlEv.criacao))
-Checar 'N1: nenhum erro de associação ao job registrado' (-not @((Razao-Ler $a.Razao).Eventos | Where-Object evento -eq 'erro_job').Count)
+Checar 'N1: varredura só verifica (nenhum evento de associação nem violação)' (-not @((Razao-Ler $a.Razao).Eventos | Where-Object { $_.evento -in @('erro_job', 'associado', 'contencao_violada') }).Count)
 Checar 'N1: tarefa ficou in_progress para a retomada' ((Status $a) -eq 'T1=in_progress') (Status $a)
 $cont = Razao-Contabilizar (Razao-Ler $a.Razao).Eventos 0.25
 Checar 'N2: chamada derrubada reservada (0.625), não zero' ([math]::Abs($cont.Reservado - 0.625) -lt 1e-6 -and $cont.Abertas.Count -eq 1) "reservado $($cont.Reservado)"
@@ -128,6 +140,100 @@ Checar 'N6: um único commit da tarefa' (@(git -C $a.Repo log --format=%s | Wher
 $a = Novo-Ambiente 1; [System.IO.File]::WriteAllText("$($a.Razao)\razao.jsonl", '{"evento":"inicio","id":"x"')
 $r = Rodar-Lancador $a 3 'ok:0.30'
 Checar 'código 21, nada iniciado' ($r.Codigo -eq 21 -and -not (Test-Path "$($a.Estado)\estado.json")) "código $($r.Codigo)"
+
+"== N11: pwsh empacotado (Microsoft Store) ou hash diferente → 27"
+$a = Novo-Ambiente 1
+if (Test-Path -LiteralPath $PwshLoja) {
+  $env:B05FAKE_MODO = 'ok:0.30'; $env:B05FAKE_DIR = $a.Fake
+  $null = & $PwshLoja @(Args-Lancador $a 3) 2>&1; $cod = $LASTEXITCODE
+  Checar 'lançador no pwsh da Store → código 27, nada iniciado' ($cod -eq 27 -and -not (Test-Path "$($a.Estado)\estado.json") -and -not (Test-Path "$($a.Razao)\razao.jsonl")) "código $cod"
+} else { Checar 'pwsh da Store presente para N11' $false $PwshLoja }
+$r = Rodar-Lancador $a 3 'ok:0.30' @('-PwshSha256', ('0' * 64))
+Checar 'hash do pwsh diferente do fixado → código 27, nada iniciado' ($r.Codigo -eq 27 -and -not (Test-Path "$($a.Estado)\estado.json") -and -not (Test-Path "$($a.Razao)\razao.jsonl")) "código $($r.Codigo)"
+
+"== N12: violação VERDADEIRA (executor → pwsh da Store → cmd → ping) → 29, externos mortos, próxima partida recusada"
+$a = Novo-Ambiente 1; $env:B05FAKE_LOJA = $PwshLoja
+$t0 = Get-Date; $r = Rodar-Lancador $a 3 'fuga' @() 2; $dur = ((Get-Date) - $t0).TotalSeconds
+Start-Sleep 3
+$ev = Eventos $a
+$cv = @($ev | Where-Object evento -eq 'contencao_violada'); $ee = @($ev | Where-Object evento -eq 'externos_encerramento')
+$execV = if ($cv.Count) { "$($cv[0].execucao)" } else { '' }
+$txtV = ($cv | ForEach-Object { @($_.violacoes) }) -join ' ; '
+Checar 'lançador saiu com 29 antes do fim natural do executor' ($r.Codigo -eq 29 -and $dur -lt 100) "código $($r.Codigo) em $([int]$dur) s: $($r.Saida)"
+Checar 'contencao_violada durável com processo real fora do job' ($cv.Count -ge 1 -and $txtV -match 'fora do job|não verificável') $txtV
+Checar 'externos_encerramento gravado' ($ee.Count -ge 1) (($ee | ForEach-Object { @($_.resultados) }) -join ' ; ')
+Checar 'conferência externa: nenhum ping da cadeia vivo' ((Vivos-Ping117).Count -eq 0) "vivos: $(@(Vivos-Ping117 | ForEach-Object ProcessId) -join ',')"
+$fpid = if (Test-Path "$($a.Fake)\fuga-pid.txt") { [int](Get-Content "$($a.Fake)\fuga-pid.txt" -Raw) } else { 0 }
+Checar 'conferência externa: pwsh da Store da cadeia morto' ($fpid -and -not (Get-Process -Id $fpid -ErrorAction SilentlyContinue)) "pid $fpid"
+$ex1 = Get-Content "$($a.Fake)\chamada-1.json" -Raw | ConvertFrom-Json
+Checar 'conferência externa: executor morto' (-not (Get-Process -Id $ex1.pid -ErrorAction SilentlyContinue))
+$antes = Hash-Pasta $a.Fake
+$r = Rodar-Lancador $a 3 'ok:0.30' @() 2
+Checar 'partida seguinte recusada (29) sem LIBERACAO_HUMANA, executor não chamado' ($r.Codigo -eq 29 -and (Hash-Pasta $a.Fake) -eq $antes) "código $($r.Codigo)"
+Set-Content "$($a.Razao)\LIBERACAO_HUMANA.txt" "Liberado por Leandro: execução $execV analisada."
+$r = Rodar-Lancador $a 3 'ok:0.30' @() 2
+Checar 'com LIBERACAO_HUMANA (id da execução) → retoma e conclui T1' ($r.Codigo -eq 0 -and (Status $a) -eq 'T1=done' -and @(Eventos $a | Where-Object evento -eq 'liberacao_humana').Count -eq 1) "código $($r.Codigo) $(Status $a) $($r.Saida)"
+Get-Process -Id $fpid -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Vivos-Ping117 | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+"== N13: dois EstadoDir com o mesmo RazaoDir em paralelo → 20"
+$a = Novo-Ambiente 1; $b = Novo-Ambiente 1; $b.Razao = $a.Razao
+$l1 = Iniciar-Lancador $a 3 'dorme:40'
+$lim = (Get-Date).AddSeconds(40); while ((Get-Date) -lt $lim -and -not @(Eventos $a | Where-Object evento -eq 'pid').Count) { Start-Sleep 1 }
+$cfgA = @(Get-ChildItem "$($a.Razao)\config-*.json"); $hA = Hash-Pasta $a.Razao
+$hCfg = ($cfgA | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
+$r = Rodar-Lancador $b 3 'ok:0.30'
+Checar 'segunda execução recusada com 20' ($r.Codigo -eq 20 -and -not (Test-Path "$($b.Estado)\estado.json")) "código $($r.Codigo) $($r.Saida)"
+Checar 'configuração da primeira intacta e somente-leitura' ($cfgA.Count -eq 1 -and ((Get-ChildItem "$($a.Razao)\config-*.json" | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ',') -eq $hCfg -and (Get-Item $cfgA[0].FullName).IsReadOnly)
+Stop-Process -Id $l1.Id -Force; Start-Sleep 3
+
+"== N14: estado.json divergente do razão → 28 antes de iniciar"
+$a = Novo-Ambiente 2; $r = Rodar-Lancador $a 3 'ok:0.30'
+$est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
+Checar 'primeira execução ok e reconciliada (estado 0.60 = base 0 + conhecido 0.60)' ($r.Codigo -eq 0 -and [math]::Abs([double]$est.custo_acumulado_usd - 0.6) -lt 1e-6) "código $($r.Codigo) custo $($est.custo_acumulado_usd)"
+$est.custo_acumulado_usd = [double]$est.custo_acumulado_usd + 1
+$est | ConvertTo-Json -Depth 8 | Set-Content "$($a.Estado)\estado.json"
+$n0 = [int](Get-Content "$($a.Fake)\chamadas.txt" -Raw)
+$r = Rodar-Lancador $a 3 'ok:0.30'
+Checar 'divergência → 28, executor não chamado' ($r.Codigo -eq 28 -and [int](Get-Content "$($a.Fake)\chamadas.txt" -Raw) -eq $n0) "código $($r.Codigo) $($r.Saida)"
+
+"== N15: falha forçada na gravação do pid → executor encerrado, reserva mantida, erro"
+$a = Novo-Ambiente 1; $env:B05_TESTE_FALHAR_PID = '1'
+$t0 = Get-Date; $r = Rodar-Lancador $a 3 'dorme:60'; $dur = ((Get-Date) - $t0).TotalSeconds
+Remove-Item Env:B05_TESTE_FALHAR_PID
+$ev = Eventos $a; $cont = Razao-Contabilizar $ev 0.25
+Checar 'chamada falhou rápido (executor encerrado, sem esperar 60 s)' ($dur -lt 45 -and (Status $a) -eq 'T1=failed') "$([int]$dur) s, $(Status $a), código $($r.Codigo)"
+Checar 'sem evento pid nem fim; reserva 0.625 mantida' (-not @($ev | Where-Object evento -eq 'pid').Count -and -not @($ev | Where-Object evento -eq 'fim').Count -and [math]::Abs($cont.Reservado - 0.625) -lt 1e-6) "reservado $($cont.Reservado)"
+Checar 'notas.txt intacto (executor não alterou nada)' ((Get-Content "$($a.Repo)\notas.txt" -Raw).Trim() -eq 'base')
+
+"== N16: reutilização sequencial do razão por outro estado → 30, razão inalterado"
+$a = Novo-Ambiente 1; $r = Rodar-Lancador $a 3 'ok:0.30'
+$b = Novo-Ambiente 1; $b.Razao = $a.Razao
+$h0 = Hash-Pasta $a.Razao
+$r = Rodar-Lancador $b 3 'ok:0.30'
+Checar 'outro estado com razão vinculado → 30' ($r.Codigo -eq 30 -and -not (Test-Path "$($b.Estado)\estado.json")) "código $($r.Codigo) $($r.Saida)"
+Checar 'RazaoDir byte a byte inalterado' ((Hash-Pasta $a.Razao) -eq $h0)
+$c = Novo-Ambiente 1; $c.Estado = $a.Estado; $c.Tarefas = $a.Tarefas; $c.Repo = $a.Repo
+$r = Rodar-Lancador $c 3 'ok:0.30'
+Checar 'estado vinculado apontado para outro razão → 30, novo razão vazio' ($r.Codigo -eq 30 -and -not @(Get-ChildItem -LiteralPath $c.Razao).Count) "código $($r.Codigo)"
+
+"== N17 + H8: custo histórico entra no orçamento e na reconciliação"
+$a = Novo-Ambiente 1; Set-Content "$($a.Estado)\estado.json" '{"custo_acumulado_usd": 2.6}'
+$r = Rodar-Lancador $a 3 'ok:0.30'
+$ev = Eventos $a
+Checar 'base 2.60 + reserva 0.625 > 3 → código 23, executor não chamado' ($r.Codigo -eq 23 -and -not (Test-Path "$($a.Fake)\chamadas.txt")) "código $($r.Codigo) $($r.Saida)"
+Checar 'base_historica gravada uma vez com 2.60' (@($ev | Where-Object evento -eq 'base_historica').Count -eq 1 -and [double](@($ev | Where-Object evento -eq 'base_historica'))[0].valor_usd -eq 2.6)
+$r = Rodar-Lancador $a 3 'ok:0.30'
+Checar 'segunda tentativa: ainda 23 e base não regravada' ($r.Codigo -eq 23 -and @(Eventos $a | Where-Object evento -eq 'base_historica').Count -eq 1) "código $($r.Codigo)"
+# Positivo: estado de antes do B-05 (custo 0.30) adotado por um razão novo → base 0.30; nova tarefa → estado 0.60 = 0.30 + 0.30.
+$a = Novo-Ambiente 1; $r = Rodar-Lancador $a 3 'ok:0.30'
+$t = Get-Content $a.Tarefas -Raw | ConvertFrom-Json
+$t.tarefas += [pscustomobject][ordered]@{ id = 'T2'; titulo = 'Tarefa 2'; prompt = '[[T2]] Acrescente uma linha em notas.txt.'; depends_on = @(); status = 'pending'; tentativas = 0; critica = $false }
+$t | ConvertTo-Json -Depth 6 | Set-Content $a.Tarefas
+Remove-Item "$($a.Estado)\b05-vinculo.json"; $a.Razao = "$($a.Base)\razao2"
+$r = Rodar-Lancador $a 3 'ok:0.30'
+$cont = Razao-Contabilizar (Eventos $a) 0.25; $est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
+Checar 'H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done' ($r.Codigo -eq 0 -and $cont.Base -eq 0.3 -and [math]::Abs([double]$est.custo_acumulado_usd - 0.6) -lt 1e-6 -and (Status $a) -eq 'T1=done T2=done') "código $($r.Codigo) base $($cont.Base) estado $($est.custo_acumulado_usd) $(Status $a) $($r.Saida)"
 
 "TOTAL B05: $($total - $falhas) / $total"
 exit $(if ($falhas) { 1 } else { 0 })
