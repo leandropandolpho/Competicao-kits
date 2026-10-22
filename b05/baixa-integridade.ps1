@@ -80,12 +80,14 @@ public static class B05LowIL {
 '@
 }
 
-# Monta a linha de comando Windows: cmd /c "<exe> <args...> < in > out 2> err", com aspas corretas.
-function B05LowIL-Cmdline([string]$exe, [string[]]$args, [string]$inFile, [string]$outFile, [string]$errFile) {
+# Monta a linha do cmd: cmd /s /c "<exe> <args...> < in > out 2> err".
+# O /s com aspas externas na 1ª e última posição faz o cmd usar o miolo LITERALMENTE (sem a regra de remoção de aspas
+# que, sem /s, embaralhava os argumentos e fazia o pwsh abrir em modo interativo — achado do diag 046).
+function B05LowIL-Cmdline([string]$exe, [string[]]$argumentos, [string]$inFile, [string]$outFile, [string]$errFile) {
   $q = { param($s) '"' + ($s -replace '"', '""') + '"' }
-  $partes = @((& $q $exe)) + @($args | ForEach-Object { & $q $_ })
+  $partes = @((& $q $exe)) + @($argumentos | ForEach-Object { & $q $_ })
   $interno = ($partes -join ' ') + " < $(& $q $inFile) > $(& $q $outFile) 2> $(& $q $errFile)"
-  return "$env:ComSpec /c `"$interno`""
+  return "`"$env:ComSpec`" /s /c `"$interno`""
 }
 
 # Bloco de ambiente UTF-16 terminado em NUL duplo, a partir de um hashtable (E84-03: ambiente higienizado).
