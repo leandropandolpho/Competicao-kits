@@ -78,3 +78,9 @@
 - Contrato proposto em `fora-do-pacote/B05_CONTRATO.md` (lançador com Job Object + embrulho com teto por chamada e razão). Implementação só depois da aprovação do contrato.
 - **Candidata implementada e testada (Ato 073)**: `hibrido@8fa8933`, evidências em `fora-do-pacote/evidencias-b05/` (28/28 determinísticos; Claude real N1/N2/N6; P1/P2; 40/40). Achado relevante: filhos do pwsh empacotado não herdam job aninhado → associação ativa por varredura. Aguardando auditoria independente.
 - **Ato 074 (ChatGPT): candidata `8fa8933` em HOLD** — findings B05-F01..F05 (contenção por varredura, falha não fechada, config compartilhada, reconciliação não obrigatória, PID não obrigatório). Sonda 029: o pwsh da Store deixa netos escaparem do job; o pwsh portátil oficial não. Contrato v3 (Ato 075) proposto em `B05_CONTRATO.md` §8, aguardando aprovação.
+- **Ato 076**: contrato v3 aprovado com emendas E76-01..04 → v3.1 (§9, commit `8528aa8`).
+- **Atos 077–080**: candidata v3.1 `hibrido@40def25` — 52/52 simulado, N1r real 0 sobreviventes, P1/P2, 40/40 (`evidencias-b05-v31/`).
+- **Ato 081 (ChatGPT): ACATO PARCIAL** — testes funcionais aprovados; B-05 em HOLD para encerramento definitivo.
+  - **B05-F06 (alta)** — executor e lançador na mesma conta: o executor pode, em tese, alterar o razão e criar `LIBERACAO_HUMANA.txt`. Exige separação de autoridade (contrato antes de implementar se mudar a arquitetura de execução). N18 com executor real.
+  - **B05-F07 (média)** — custo do executor sem validação de finito/não negativo. **Corrigido em `ec26dcb`** + N19.
+  - **Ressalva do conhost** — dispensa por nome/pai → **endurecida em `ec26dcb`** (caminho System32 + criação entre o lançador e a associação + identidade PID+criação) + N20 com processos reais e pai falsificado.
