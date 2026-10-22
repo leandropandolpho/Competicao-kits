@@ -251,4 +251,5 @@ $codigo = $ctl.ExitCode
 # ---------------- H9: reconciliação depois ----------------
 $m = Conferir-Reconciliacao 'depois'
 if ($m) { try { Razao-Gravar $RazaoDir @{ evento = 'divergencia_reconciliacao'; execucao = $execucao; detalhe = $m } } catch { }; Parar 28 $m }
+if ($BaixaIntegridade -and $env:B05_BAIXO_DIR -and (Test-Path -LiteralPath $env:B05_BAIXO_DIR)) { try { Remove-Item -Recurse -Force $env:B05_BAIXO_DIR -ErrorAction SilentlyContinue } catch { } }
 exit $codigo

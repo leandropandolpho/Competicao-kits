@@ -33,9 +33,10 @@ public static class B05LowIL {
   // Token de baixa integridade + restrito (sem privilégios). Devolve "" ou a mensagem de erro.
   public static string CriarToken(out IntPtr tokenBaixo) {
     tokenBaixo = IntPtr.Zero; IntPtr t, restrito, dup, sid;
-    if (!OpenProcessToken(GetCurrentProcess(), 0x000E | 0x0001 | 0x0004, out t)) return "OpenProcessToken " + Marshal.GetLastWin32Error();
+    // TOKEN_ADJUST_DEFAULT (0x0080) é obrigatório para SetTokenInformation(TokenIntegrityLevel); sem ele dá ACCESS_DENIED (5).
+    if (!OpenProcessToken(GetCurrentProcess(), 0x0002 | 0x0008 | 0x0001 | 0x0004, out t)) return "OpenProcessToken " + Marshal.GetLastWin32Error();
     if (!CreateRestrictedToken(t, DISABLE_MAX_PRIVILEGE, 0, IntPtr.Zero, 0, IntPtr.Zero, 0, IntPtr.Zero, out restrito)) return "CreateRestrictedToken " + Marshal.GetLastWin32Error();
-    if (!DuplicateTokenEx(restrito, 0x000E | 0x0001, IntPtr.Zero, 2, 1, out dup)) return "DuplicateTokenEx " + Marshal.GetLastWin32Error();
+    if (!DuplicateTokenEx(restrito, 0x0002 | 0x0008 | 0x0080 | 0x0001, IntPtr.Zero, 2, 1, out dup)) return "DuplicateTokenEx " + Marshal.GetLastWin32Error();
     if (!ConvertStringSidToSidW("S-1-16-4096", out sid)) return "ConvertStringSid " + Marshal.GetLastWin32Error();
     TML m = new TML(); m.Label.Sid = sid; m.Label.Attr = 0x20;   // SE_GROUP_INTEGRITY
     if (!SetTokenInformation(dup, 25, ref m, (uint)(Marshal.SizeOf(typeof(TML)) + 12))) return "SetTokenInformation " + Marshal.GetLastWin32Error();
