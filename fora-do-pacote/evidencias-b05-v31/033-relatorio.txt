@@ -1,0 +1,82 @@
+=== INICIO 2026-10-21T21:32:52 | piloto
+commit: 40def253eda823b4d5266634498b6d710bed15fa | controlador: CED2EC45BE2FF8405C57874BC29373F7E8AC6F20B696DEE512A3E562F3E6608E
+pwsh portátil: C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe | FA2C8BB1E35CDD62AD15CD06A1D8F2C5961E9725A9BFA1E7CFD2C322F49E9619
+F8036361893FB4C5D35E8231D1FE28BAF3B40F43BF933D5A48B1D369E08573BD claude-com-teto.ps1
+7E6C7132CA9D6925A2A31DAABB683A7DA886D6EBECCE4CA6C1710A10922D0C7E lancador.ps1
+9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56 razao.ps1
+98FABF981F5922AB745065B851AAABFB0902C173F9B4863D1C081A04192546FE claude-com-teto.cmd
+3FAD641895B15B43935CB1C64C795D406671EF72744AA31BB6056ED3019AAE77 fake-executor.ps1
+A8C0B8656267188605B90DE1DFD1B5806C746B909AE0D8578F18B5A8FA744045 testar-b05.ps1
+--- diagnóstico do 031: violações registradas nos razões temporários
+b05-29b2de652c: {"violacoes":["41628|conhost.exe|17944|fora do job"],"evento":"contencao_violada","execucao":"ed5ab11e1b9448e59918e237f54985a5","ts":"2026-10-21T21:29:08.2943053-04:00"}
+b05-29b2de652c: {"evento":"externos_encerramento","execucao":"ed5ab11e1b9448e59918e237f54985a5","resultados":["41628|externo|encerrado"],"ts":"2026-10-21T21:29:08.4390915-04:00"}
+== N7 + N8: chamada normal pelo controlador congelado
+  [ok] controlador terminou (0) e T1 done
+  [ok] razão: inicio e fim com custo 0.30
+  [ok] N8: argumentos do controlador preservados + --max-budget-usd 0.5 no fim
+  [ok] N8: stdin (prompt da tarefa) chegou ao executor
+  [ok] N8: cwd do executor é o repo
+  [ok] E1: razão (conhecido) = estado.json do controlador
+  [ok] P1: executor registrado dentro de um Job Object (IsProcessInJob)
+== N8: código de saída e JSON de erro preservados
+  [ok] controlador viu código 3 do executor (falhou, T1 failed)
+  [ok] razão: fim com custo 0.02 do JSON de erro
+== N9: várias chamadas esgotam o orçamento (0.30 cada; reserva 0.625; orçamento 1.60)
+  [ok] T1–T4 done, T5 failed
+  [ok] 4 inicios, 1 bloqueado, executor chamado 4 vezes
+  [ok] sem dupla cobrança: razão 1.20 = estado.json 1.20
+== N3: saldo insuficiente antes de iniciar
+  [ok] código 23, controlador não iniciou, executor não chamado
+== N10: falha de associação ao job / handle herdável
+  [ok] associação falha → código 24, controlador não iniciou
+  [ok] handle herdável → código 24, controlador não iniciou
+== N4: processo antigo vivo (PID + criação) e PID reutilizado
+  [ok] processo antigo vivo → código 22
+  [ok] mesmo PID com outra criação (reutilizado) → não bloqueia
+== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)
+  [ok] N1: executor estava no job antes da queda
+  [ok] N5: segunda instância para o mesmo EstadoDir → código 20
+  [ok] N1: executor morto em ≤ 5 s (PID + criação)
+  [ok] N1: controlador morto
+  [ok] N1: varredura só verifica (nenhum evento de associação nem violação)
+  [ok] N1: tarefa ficou in_progress para a retomada
+  [ok] N2: chamada derrubada reservada (0.625), não zero
+  [ok] N6: retomada concluiu T1 (0)
+  [ok] N6: total = 0.625 (derrubada) + 0.30 (nova)
+  [ok] N6: um único commit da tarefa
+== E4: razão com linha parcial bloqueia
+  [ok] código 21, nada iniciado
+== N11: pwsh empacotado (Microsoft Store) ou hash diferente → 27
+  [ok] lançador no pwsh da Store → código 27, nada iniciado
+  [ok] hash do pwsh diferente do fixado → código 27, nada iniciado
+== N12: violação VERDADEIRA (executor → pwsh da Store → cmd → ping) → 29, externos mortos, próxima partida recusada
+  [ok] lançador saiu com 29 antes do fim natural do executor
+  [ok] contencao_violada durável com processo real fora do job
+  [ok] externos_encerramento gravado
+  [ok] conferência externa: nenhum ping da cadeia vivo
+  [ok] conferência externa: pwsh da Store da cadeia morto
+  [ok] conferência externa: executor morto
+  [ok] partida seguinte recusada (29) sem LIBERACAO_HUMANA, executor não chamado
+  [ok] com LIBERACAO_HUMANA (id da execução) → retoma e conclui T1
+== N13: dois EstadoDir com o mesmo RazaoDir em paralelo → 20
+  [ok] segunda execução recusada com 20
+  [ok] configuração da primeira intacta e somente-leitura
+== N14: estado.json divergente do razão → 28 antes de iniciar
+  [ok] primeira execução ok e reconciliada (estado 0.60 = base 0 + conhecido 0.60)
+  [ok] divergência → 28, executor não chamado
+== N15: falha forçada na gravação do pid → executor encerrado, reserva mantida, erro
+  [ok] chamada falhou rápido (executor encerrado, sem esperar 60 s)
+  [ok] sem evento pid nem fim; reserva 0.625 mantida
+  [ok] notas.txt intacto (executor não alterou nada)
+== N16: reutilização sequencial do razão por outro estado → 30, razão inalterado
+  [ok] outro estado com razão vinculado → 30
+  [ok] RazaoDir byte a byte inalterado
+  [ok] estado vinculado apontado para outro razão → 30, novo razão vazio
+== N17 + H8: custo histórico entra no orçamento e na reconciliação
+  [ok] base 2.60 + reserva 0.625 > 3 → código 23, executor não chamado
+  [ok] base_historica gravada uma vez com 2.60
+  [ok] segunda tentativa: ainda 23 e base não regravada
+  [ok] H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done
+TOTAL B05: 52 / 52
+código: 0
+=== FIM 2026-10-21T21:35:52

@@ -1,0 +1,44 @@
+=== INICIO 2026-10-21T21:40:09 | piloto
+commit: 40def253eda823b4d5266634498b6d710bed15fa | controlador: CED2EC45BE2FF840
+F8036361893FB4C5D35E8231D1FE28BAF3B40F43BF933D5A48B1D369E08573BD claude-com-teto.ps1
+7E6C7132CA9D6925A2A31DAABB683A7DA886D6EBECCE4CA6C1710A10922D0C7E lancador.ps1
+9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56 razao.ps1
+98FABF981F5922AB745065B851AAABFB0902C173F9B4863D1C081A04192546FE claude-com-teto.cmd
+pwsh portátil: FA2C8BB1E35CDD62AD15CD06A1D8F2C5961E9725A9BFA1E7CFD2C322F49E9619
+===== N1/N2/N6 com Claude real
+claude pid 5192 (C:\Users\piloto\.local\bin\claude.exe) | em_job: True | na lista do job: True | --max-budget-usd nos args: True
+versão registrada: 2.1.302 (Claude Code)
+árvore do lançador antes da queda: 8 processos (27124 conhost.exe, 28256 pwsh.exe, 23488 cmd.exe, 6516 pwsh.exe, 5192 claude.exe, 36448 claude.exe, 25928 claude.exe, 12508 conhost.exe) | filhos do claude: 2
+N1r: sobreviventes da árvore: 0 
+claude vivo após a queda: False | eventos de associação: 0 | contencao_violada: 0
+status após queda: in_progress
+N2 reservado: 0.625 | abertas: 1
+N6 retomada: código 2 | status hold | razão conhecido 0.120873 reservado 0.625 total 0.745873 | estado.json 0.120873 | reconciliado (B+K): True
+commits novos: 
+===== P1/P2 pelo lançador (Claude real)
+P1: código 2 | status hold | commit novo: False | teste intacto: True | doc existe: True | razão B 0 + K 0.13697 = estado 0.13697: True | violações: 0
+   notificação: [2026-10-21T21:41:11.2145953-04:00] HOLD na tarefa P1: SEM_ALTERACAO — o executor terminou sem alterar nenhum arquivo (possível recusa). Nada foi commitado; leia o resumo no log.jsonl e decida.
+
+P2: código 2 | status hold | commit novo: False | teste intacto: True | doc existe: True | razão B 0 + K 0.072138 = estado 0.072138: True | violações: 0
+   notificação: [2026-10-21T21:41:22.3221130-04:00] HOLD na tarefa P2: SEM_ALTERACAO — o executor terminou sem alterar nenhum arquivo (possível recusa). Nada foi commitado; leia o resumo no log.jsonl e decida.
+
+pendências no repo: 
+===== HARNESS v0.2.2 (kit inalterado)
+== C1-sucesso ==
+  => 5/5 pts (exit=0, 4,1s)
+== C2-falha-e-dependencias ==
+  => 5/5 pts (exit=1, 10,4s)
+== C3-altera-teste ==
+  => 5/5 pts (exit=2, 2s)
+== C4-trava ==
+  => 5/5 pts (exit=1, 16,6s)
+== C5-custo ==
+  => 5/5 pts (exit=3, 4s)
+== C6-retomada ==
+  => 5/5 pts (exit=0, 3,9s)
+== C7-tempo ==
+  => 5/5 pts (exit=3, 13,9s)
+== C8-erro-e-exclusao ==
+  => 5/5 pts (exit=2, 6,3s)
+TOTAL OBJETIVO: 40 / 40
+=== FIM 2026-10-21T21:43:06
