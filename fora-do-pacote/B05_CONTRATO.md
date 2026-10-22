@@ -199,7 +199,12 @@ Mesa convergente (ChatGPT Ato 084 ACATO COM EMENDAS; Gemini Ato 085 concordânci
 - Trava financeira: qualquer chamada seguinte da MESMA execução cai na trava e falha (28) sem invocar o executor.
 - Teste **N19-R**: executor invocado 1×, sem commit, reserva 0,625 mantida, `trava_financeira`+`evidencia_bruta` gravadas, T1 failed, estado = B+K.
 
-### E84-02 a E84-05 — isolamento por nível de integridade (a implementar)
+### E84-02 e E84-03 — IMPLEMENTADAS e testadas (candidata a `db398a7`, bateria 82/82)
+- **E84-02** token do executor BAIXO + restrito (`CreateRestrictedToken` DISABLE_MAX_PRIVILEGE); `CreateProcessAsUser` sem herança de handles (E/S por redireção de arquivo, `cmd /s /c`); nível efetivo exigido = 4096 (código 5 se não); árvore do repo rotulada baixa e `.git` médio explícito (G2).
+- **E84-03** NO_READ_UP+NO_WRITE_UP+NO_EXECUTE_UP (SDDL `S:(ML;OICI;NRNWNX;;;ME)`) em razão, estado e chave da supervisora; ambiente do executor higienizado (lista branca, sem `B05_*`/segredos; `TEMP` e `CLAUDE_CONFIG_DIR` baixos). Teste **N18b/N18e**: as 8 tentativas (ler/escrever razão, forjar liberação, apagar config, ler credencial, hook/.git, vars vazadas) NEGADAS; tarefa normal completa e comita.
+- Achados corrigidos no caminho: máscara do token sem `TOKEN_ADJUST_DEFAULT` (ACCESS_DENIED 5); parâmetro `$args` colidindo com a variável automática (executor abria interativo); `cmd /c` sem `/s`; `.git` herdando o rótulo baixo da raiz.
+
+### E84-04 e E84-05 — a implementar
 - **E84-02** token do executor: nível baixo (S-1-16-4096) + `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE)`; `CreateProcessAsUser` com `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` só dos 3 pipes (ou `bInheritHandles=FALSE`); validar IL efetivo e `IsProcessInJob` antes de prosseguir.
 - **E84-03** credenciais: SACL de rótulo obrigatório com `NO_WRITE_UP`+`NO_READ_UP` (SDDL `S:(ML;OICI;NWNR;;;ME)`) na pasta da chave da supervisora e em `estado`/`b05` sensíveis; bloco de ambiente higienizado (sem variáveis da supervisora) ao executor.
 - **E84-04** modelo de ameaça COM/broker/processo médio preexistente: documentado; `JOB_OBJECT_UILIMIT_*`; a certificação Low IL vale só para o piloto supervisionado — operação desassistida bloqueada até isolamento de principal (SID distinto, AppContainer ou VM).
