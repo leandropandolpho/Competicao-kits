@@ -90,8 +90,21 @@ try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b, 0, $b
 $p.WaitForExit()
 $saida = $out.Result; $erro = $err.Result; $codigo = $p.ExitCode
 $custo = $null
-try { $j = $saida.Trim() | ConvertFrom-Json; if ($j.PSObject.Properties['total_cost_usd'] -and $null -ne $j.total_cost_usd) { $custo = [double]$j.total_cost_usd } } catch { }
-try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = $custo; custo_desconhecido = ($null -eq $custo); codigo = $codigo } } catch { }
+$custoBruto = $null
+try {
+  $j = $saida.Trim() | ConvertFrom-Json
+  if ($j.PSObject.Properties['total_cost_usd']) {
+    $v = $j.total_cost_usd; $custoBruto = "$v"
+    # B05-F07: só número JSON finito e não negativo vira custo conhecido. Texto, nulo, negativo ou não finito ⇒ desconhecido
+    # (a reserva fica). A saída do executor segue intacta para o controlador; se ele contabilizar outro valor, a
+    # reconciliação (estado = B + K) diverge e o lançador fecha com 28.
+    if ($v -is [double] -or $v -is [long] -or $v -is [int] -or $v -is [decimal]) {
+      $d = [double]$v
+      if ([double]::IsFinite($d) -and $d -ge 0) { $custo = $d }
+    }
+  }
+} catch { }
+try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = $custo; custo_desconhecido = ($null -eq $custo); custo_bruto = $custoBruto; codigo = $codigo } } catch { }
 [Console]::Out.Write($saida)
 if ($erro) { [Console]::Error.Write($erro) }
 exit $codigo

@@ -1,5 +1,5 @@
 # fake-executor.ps1 — executor SIMULADO para os testes do B-05 (imita claude -p --output-format json).
-# Modo em B05FAKE_MODO: ok:<custo> | dorme:<seg> | semcusto | falha:<codigo> | fuga. Registro em B05FAKE_DIR.
+# Modo em B05FAKE_MODO: ok:<custo> | dorme:<seg> | semcusto | falha:<codigo> | fuga | cru (imprime B05FAKE_SAIDA literal; N19). Registro em B05FAKE_DIR.
 # fuga (N12, violação VERDADEIRA): inicia o pwsh da Microsoft Store (B05FAKE_LOJA) → cmd → ping, a cadeia que a
 # sonda 029 mostrou escapar do job; nenhum rótulo artificial — quem decide se está fora do job é o Windows.
 $stdin = if ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() } else { '' }
@@ -24,5 +24,6 @@ switch ($tipo) {
     $f = [System.Diagnostics.Process]::Start($psi)
     if ($dir) { Set-Content (Join-Path $dir 'fuga-pid.txt') $f.Id -NoNewline }
     Start-Sleep -Seconds 120; Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'fuga'; total_cost_usd = 0.01 } | ConvertTo-Json -Compress; exit 0 }
+  'cru'      { Alterar; [Console]::Out.Write("$env:B05FAKE_SAIDA"); exit 0 }
   default    { Write-Output "modo desconhecido: $modo"; exit 9 }
 }
