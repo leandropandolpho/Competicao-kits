@@ -54,46 +54,84 @@ try {
 $exe = "$($cfg.executor)"
 $cmd = Get-Command -Name $exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($cmd) { $exe = $cmd.Source }
-$psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
-foreach ($a in @(if ("$($cfg.executor_prefixo)") { "$($cfg.executor_prefixo)" -split '\|' })) { $psi.ArgumentList.Add($a) }
-foreach ($a in $args) { $psi.ArgumentList.Add([string]$a) }
-$psi.ArgumentList.Add('--max-budget-usd'); $psi.ArgumentList.Add(([string]$teto).Replace(',', '.'))
-$psi.UseShellExecute = $false; $psi.WorkingDirectory = (Get-Location).Path
-$psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-$psi.StandardOutputEncoding = $Utf8; $psi.StandardErrorEncoding = $Utf8
-try { $p = [System.Diagnostics.Process]::Start($psi) }
-catch {
-  # Falha comprovadamente anterior à invocação: o processo não foi criado → custo 0 conhecido (E5).
-  try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = 0.0; custo_desconhecido = $false; motivo = 'falha_antes_da_invocacao'; codigo = -2 } } catch { }
-  Sair-Erro "executor não iniciou: $($_.Exception.Message)"
-}
-try { $criacao = $p.StartTime.ToUniversalTime().ToString('o') } catch { $criacao = (Get-Date).ToUniversalTime().ToString('o') }
-$emJob = $null
-if ($IsWindows) {
+$argExec = @(if ("$($cfg.executor_prefixo)") { "$($cfg.executor_prefixo)" -split '\|' }) + @($args | ForEach-Object { [string]$_ }) + @('--max-budget-usd', ([string]$teto).Replace(',', '.'))
+$lowil = $IsWindows -and $cfg.PSObject.Properties['baixa_integridade'] -and $cfg.baixa_integridade
+
+if (-not $lowil) {
+  # ---- Caminho de integridade MÉDIA (tests simulados, não-Windows, fallback) ----
+  $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+  foreach ($a in $argExec) { $psi.ArgumentList.Add($a) }
+  $psi.UseShellExecute = $false; $psi.WorkingDirectory = (Get-Location).Path
+  $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.StandardOutputEncoding = $Utf8; $psi.StandardErrorEncoding = $Utf8
+  try { $p = [System.Diagnostics.Process]::Start($psi) }
+  catch {
+    try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = 0.0; custo_desconhecido = $false; motivo = 'falha_antes_da_invocacao'; codigo = -2 } } catch { }
+    Sair-Erro "executor não iniciou: $($_.Exception.Message)"
+  }
+  try { $criacao = $p.StartTime.ToUniversalTime().ToString('o') } catch { $criacao = (Get-Date).ToUniversalTime().ToString('o') }
+  $emJob = $null
+  if ($IsWindows) {
+    try {
+      Add-Type -Namespace B05 -Name Proc -MemberDefinition '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool IsProcessInJob(System.IntPtr proc, System.IntPtr job, out bool result);' -ErrorAction Stop
+      $r0 = $false; if ([B05.Proc]::IsProcessInJob($p.Handle, [IntPtr]::Zero, [ref]$r0)) { $emJob = $r0 }
+    } catch { }
+  }
   try {
-    Add-Type -Namespace B05 -Name Proc -MemberDefinition '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool IsProcessInJob(System.IntPtr proc, System.IntPtr job, out bool result);' -ErrorAction Stop
-    $r0 = $false; if ([B05.Proc]::IsProcessInJob($p.Handle, [IntPtr]::Zero, [ref]$r0)) { $emJob = $r0 }
-  } catch { }
+    if ($env:B05_TESTE_FALHAR_PID -eq '1') { throw 'falha de gravação injetada (teste N15)' }
+    Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = $execucao; pid = $p.Id; criacao = $criacao; em_job = $emJob; nivel_il = $null; argumentos = @($argExec) }
+  } catch {
+    $msg = $_.Exception.Message
+    try { $p.Kill($true) } catch { }; try { $p.WaitForExit(10000) | Out-Null } catch { }
+    Sair-Erro "falha ao gravar o pid no razão ($msg): executor encerrado, reserva mantida" 3
+  }
+  if ($IsWindows -and $emJob -ne $true) { try { $p.Kill($true) } catch { }; Sair-Erro "executor fora do Job Object (em_job=$emJob): encerrado, reserva mantida" 4 }
+  $out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
+  try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b, 0, $b.Length); $p.StandardInput.Close() } catch { }
+  $p.WaitForExit()
+  $saida = $out.Result; $erro = $err.Result; $codigo = $p.ExitCode
+} else {
+  # ---- E84-02: executor em BAIXA integridade (token restrito, sem herança de handles), E/S por redireção de arquivo ----
+  . (Join-Path $PSScriptRoot 'baixa-integridade.ps1')
+  $raizBaixo = if ($env:B05_BAIXO_DIR) { $env:B05_BAIXO_DIR } else { $env:TEMP }
+  $cTmp = Join-Path $raizBaixo ('chamada-' + $id.Substring(0, 12))
+  New-Item -ItemType Directory -Force $cTmp | Out-Null
+  & icacls $cTmp /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null   # pasta baixa: o executor baixo escreve out/err aqui
+  $inFile = "$cTmp\in.txt"; $outFile = "$cTmp\out.txt"; $errFile = "$cTmp\err.txt"
+  [System.IO.File]::WriteAllText($inFile, $entrada, $Utf8)
+  $tok = [IntPtr]::Zero; $msgTok = [B05LowIL]::CriarToken([ref]$tok)
+  if ($msgTok) {
+    try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = 0.0; custo_desconhecido = $false; motivo = 'falha_token_baixo'; codigo = -2 } } catch { }
+    Sair-Erro "token de baixa integridade não criado: $msgTok"
+  }
+  $cmdline = B05LowIL-Cmdline $exe $argExec $inFile $outFile $errFile
+  $lpid = 0; $hProc = [IntPtr]::Zero
+  $msgLan = [B05LowIL]::Lancar($tok, $cmdline, (Get-Location).Path, [IntPtr]::Zero, [ref]$lpid, [ref]$hProc)
+  [B05LowIL]::Fechar($tok)
+  if ($msgLan) {
+    try { Razao-Gravar $dir @{ evento = 'fim'; id = $id; custo_usd = 0.0; custo_desconhecido = $false; motivo = 'falha_lancar_baixo'; codigo = -2 } } catch { }
+    Sair-Erro "executor em baixa integridade não iniciou: $msgLan"
+  }
+  $criacao = [DateTime]::FromFileTimeUtc([B05LowIL]::CriacaoUtc($hProc)).ToString('o')
+  $emJob = [B05LowIL]::EmJob($hProc)
+  Start-Sleep -Milliseconds 150
+  $nivel = [B05LowIL]::Nivel($lpid)   # 4096 = baixo
+  # H10 + E84-02: pid obrigatório COM nível de integridade; sem ele, ou se o nível não for baixo, mata e mantém a reserva.
+  try {
+    if ($env:B05_TESTE_FALHAR_PID -eq '1') { throw 'falha de gravação injetada (teste N15)' }
+    Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = $execucao; pid = $lpid; criacao = $criacao; em_job = $emJob; nivel_il = $nivel; argumentos = @($argExec) }
+  } catch {
+    $msg = $_.Exception.Message; [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc)
+    Sair-Erro "falha ao gravar o pid no razão ($msg): executor encerrado, reserva mantida" 3
+  }
+  if ($emJob -ne $true) { [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc); Sair-Erro "executor fora do Job Object (em_job=$emJob): encerrado, reserva mantida" 4 }
+  if ($nivel -ne 4096) { [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc); Sair-Erro "executor NÃO está em baixa integridade (nível $nivel): encerrado, reserva mantida" 5 }
+  $codigo = [int][B05LowIL]::Esperar($hProc, [uint32]::MaxValue)
+  [B05LowIL]::Fechar($hProc)
+  $saida = [System.IO.File]::ReadAllText($outFile, $Utf8)
+  $erro = if (Test-Path $errFile) { [System.IO.File]::ReadAllText($errFile, $Utf8) } else { '' }
+  try { Remove-Item -Recurse -Force $cTmp -ErrorAction SilentlyContinue } catch { }
 }
-# H10: o evento pid é obrigatório. Sem ele, o executor é morto (com a árvore), a reserva fica (sem 'fim') e a chamada falha.
-try {
-  if ($env:B05_TESTE_FALHAR_PID -eq '1') { throw 'falha de gravação injetada (teste N15)' }
-  Razao-Gravar $dir @{ evento = 'pid'; id = $id; execucao = $execucao; pid = $p.Id; criacao = $criacao; em_job = $emJob; argumentos = @($psi.ArgumentList) }
-} catch {
-  $msg = $_.Exception.Message
-  try { $p.Kill($true) } catch { }
-  try { $p.WaitForExit(10000) | Out-Null } catch { }
-  Sair-Erro "falha ao gravar o pid no razão ($msg): executor encerrado, reserva mantida" 3
-}
-# Defesa adicional: executor fora de job ⇒ não segue (o lançador também detecta e encerra tudo).
-if ($IsWindows -and $emJob -ne $true) {
-  try { $p.Kill($true) } catch { }
-  Sair-Erro "executor fora do Job Object (em_job=$emJob): encerrado, reserva mantida" 4
-}
-$out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
-try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b, 0, $b.Length); $p.StandardInput.Close() } catch { }
-$p.WaitForExit()
-$saida = $out.Result; $erro = $err.Result; $codigo = $p.ExitCode
 $custo = $null
 $custoBruto = $null
 $custoPresente = $false

@@ -24,6 +24,7 @@ param(
   [string]$ExecutorPrefixo = '',
   [string]$VersaoClaude = '2.1.302',
   [string]$PwshSha256 = 'FA2C8BB1E35CDD62AD15CD06A1D8F2C5961E9725A9BFA1E7CFD2C322F49E9619',   # pwsh.exe 7.6.7 portátil
+  [switch]$BaixaIntegridade,         # E84-02: executor em baixa integridade
   [switch]$IgnorarVersao,            # só testes com executor simulado
   [switch]$TesteFalharAssociacao,    # só N10
   [switch]$TesteHandleHerdavel       # só N10
@@ -179,12 +180,24 @@ foreach ($x in @([B05Job]::Subarvore($raizL))) {
 # ---------------- H6: configuração imutável por execução; partida do controlador ----------------
 $execucao = [guid]::NewGuid().ToString('N')
 $cfg = [ordered]@{ execucao = $execucao; orcamento_usd = $OrcamentoUsd; teto_chamada_usd = $TetoChamadaUsd; folga = $Folga
-                   executor = $Executor; executor_prefixo = $ExecutorPrefixo; versao_claude = "$v"; pwsh = $PwshProprio; criado_em = (Get-Date).ToString('o') }
+                   executor = $Executor; executor_prefixo = $ExecutorPrefixo; versao_claude = "$v"; pwsh = $PwshProprio
+                   baixa_integridade = [bool]$BaixaIntegridade; criado_em = (Get-Date).ToString('o') }
 $arqCfg = Join-Path $RazaoDir "config-$execucao.json"
 $fs = [System.IO.FileStream]::new($arqCfg, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write)   # CreateNew: nunca sobrescreve
 try { $b = $script:Utf8SemBom.GetBytes(($cfg | ConvertTo-Json)); $fs.Write($b, 0, $b.Length); $fs.Flush($true) } finally { $fs.Dispose() }
 (Get-Item -LiteralPath $arqCfg).IsReadOnly = $true
 $env:B05_DIR = $RazaoDir; $env:B05_EXECUCAO = $execucao; $env:B05_PWSH = $PwshProprio
+if ($BaixaIntegridade) {
+  # E84-02: pasta de baixa integridade para a E/S do executor (ele não escreve em nada de nível médio).
+  $baixoDir = Join-Path ([IO.Path]::GetTempPath()) "b05-baixo-$execucao"
+  New-Item -ItemType Directory -Force $baixoDir | Out-Null
+  & icacls $baixoDir /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
+  $env:B05_BAIXO_DIR = $baixoDir
+  # G2: a árvore de trabalho do repositório fica BAIXA (o executor baixo edita o código), mas .git fica MÉDIO
+  # (o executor não planta hooks nem reescreve histórico; o controlador médio continua escrevendo por write-down).
+  Get-ChildItem -LiteralPath $RepoPath -Force | Where-Object Name -ne '.git' | ForEach-Object { & icacls $_.FullName /setintegritylevel '(OI)(CI)low' /T /Q 2>&1 | Out-Null }
+  & icacls $RepoPath /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
+}
 $env:PATH = "$PwshDir;$env:PATH"   # E76-02: "pwsh" pedido por qualquer descendente resolve para o portátil
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 
