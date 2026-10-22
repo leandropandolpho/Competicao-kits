@@ -1,5 +1,5 @@
 # Contrato da candidata B-05 — custo de chamada interrompida, processos órfãos e retomada
-**v1: Ato 070 · v2: Ato 072 (emendas do Ato 071) · v3: Ato 075 (resposta aos findings B05-F01..F05 do Ato 074) · Autor: Claude (Auditor Base) · Situação v3: PROPOSTA — aguardando aprovação antes de implementar (exigência do Ato 074 para mudança da arquitetura de contenção)**
+**v1: Ato 070 · v2: Ato 072 (emendas do Ato 071) · v3: Ato 075 (resposta aos findings B05-F01..F05 do Ato 074) · v3.1: Ato 077 (emendas E76-01..04 do Ato 076) · Autor: Claude (Auditor Base) · Situação: v3 APROVADA COM EMENDAS (Ato 076); v3.1 incorpora as emendas — implementação autorizada sem nova aprovação arquitetural**
 
 Base: convergência dos Atos 068 (Claude), 069 (ChatGPT) e 069 (Perplexity, mesma família do Claude): resolver o B-05 **sem alterar o controlador congelado** `7cd7864` (`ced2ec45…608e`) nem a supervisora `6b45dea`.
 
@@ -126,3 +126,28 @@ Conclusão: a falha de herança é do **pwsh empacotado**; com pwsh não empacot
 | N14 | `estado.json` com custo divergente do razão | Código 28 antes de iniciar |
 | N15 | Falha forçada na gravação do `pid` (razão somente-leitura após a reserva) | Executor encerrado, reserva mantida, código ≠ 0 |
 | N1r | Queda do lançador com Claude real | Todos os descendentes (inclusive filhos do claude.exe) mortos; **nenhum** evento de associação forçada (a varredura só verifica) |
+
+## 9. Versão 3.1 (Ato 077) — emendas E76-01 a E76-04 (prevalecem sobre a seção 8)
+
+### E76-01 — Sequência executável de encerramento (substitui H4)
+1. Ao detectar descendente vivo fora do job (ou não verificável): grava **durável** `contencao_violada` (PIDs, nomes, pais) **antes** de qualquer encerramento.
+2. Tenta encerrar cada descendente comprovadamente externo (`TerminateProcess`) e grava **durável** `externos_encerramento` com o resultado de cada um.
+3. Chama `TerminateJobObject(job, 29)` — o próprio lançador é encerrado junto (está no job); nada depende de instruções posteriores.
+4. **Verificação externa**: na partida seguinte, qualquer `contencao_violada` no razão sem liberação humana ⇒ recusa (código 29), sem retomada automática. Liberação só por decisão humana registrada (arquivo `LIBERACAO_HUMANA.txt` no `RazaoDir` contendo o id da execução violada; o lançador grava `liberacao_humana` e só então prossegue). Descendente externo que não pôde ser encerrado fica registrado e mantém o bloqueio.
+
+### E76-02 — N12 com violação verdadeira
+- N12 cria uma **genealogia real**: o executor simulado (dentro do job, pwsh portátil) inicia o **pwsh da Microsoft Store**, que inicia `cmd → ping` — a mesma cadeia que a sonda 029 mostrou escapar do job pelo comportamento do sistema operacional, sem nenhum rótulo artificial. Exigido: detecção (`contencao_violada` com o `cmd`/`ping` reais), encerramento dos externos, job encerrado (código 29), conferência externa pelo teste (nenhum processo da cadeia vivo) e recusa da partida seguinte.
+- Simulações de lógica, se houver, ficam rotuladas como tal e não contam como evidência de contenção do SO. N1r com Claude real continua obrigatório.
+- Consequência operacional assumida: o lançador põe o diretório do pwsh portátil **no início do PATH** do controlador, para que um `pwsh` pedido pelo executor resolva para o portátil; se mesmo assim algo iniciar o pwsh da Store e ele gerar filhos fora do job, a execução é encerrada (falha fechada) — preferível a seguir sem contenção.
+
+### E76-03 — Vínculo permanente EstadoDir ↔ RazaoDir
+- Na primeira execução, o lançador grava `RazaoDir/vinculo.json` (caminho canônico do `EstadoDir`, id do vínculo) e `EstadoDir/b05-vinculo.json` (caminho canônico do `RazaoDir`, mesmo id). Em toda partida, os dois precisam existir e coincidir; qualquer divergência (outro estado reutilizando o razão, ou o estado apontando outro razão) ⇒ código 30, **sem gravar nada** no razão.
+- **N16**: reutilização sequencial de um razão vinculado a outro estado ⇒ código 30; razão byte a byte inalterado (hash antes = depois).
+
+### E76-04 — Custo histórico no orçamento
+- Admissão (lançador antes de iniciar e embrulho antes de cada chamada): **B + K + R + T·(1+F) ≤ M** — B base histórica, K custo conhecido do razão, R reservas pendentes, T teto da chamada, F folga, M orçamento total.
+- `base_historica` é gravada **uma única vez**, na criação do vínculo, igual ao `custo_acumulado_usd` do `estado.json` existente (0 se não houver); nunca é alterada depois. A reconciliação (H8/H9) usa essa base fixa; divergência posterior não é absorvida por ajuste da base.
+- **N17**: estado preexistente com custo histórico que deixa saldo < T·(1+F) ⇒ bloqueio antes de qualquer invocação (código 23), executor não chamado.
+
+### Bateria de aceite da nova candidata
+N1–N17 (com N1r usando Claude real), P1/P2 em HOLD sem commit e harness 40/40 — todos no Windows, com o pwsh portátil.
