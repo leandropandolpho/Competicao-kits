@@ -1,0 +1,107 @@
+=== INICIO 2026-10-22T13:45:45 | piloto
+commit: ec26dcb3622e915bbee68c6d7fb53148513903df | controlador: CED2EC45BE2FF8405C57874BC29373F7E8AC6F20B696DEE512A3E562F3E6608E
+pwsh portátil: FA2C8BB1E35CDD62AD15CD06A1D8F2C5961E9725A9BFA1E7CFD2C322F49E9619
+1B3374D4980732B73024ABC737E2C4A381FE5B5BAB0092828EE571D8F70CE16E b05job.ps1
+2EF5CF35E23C32517EAE85937D5060B4EBEF5CF747096A87C4E0A22B34C28F6D claude-com-teto.ps1
+FAD2199BD27BE9CA62616083D9EB6F3F80C095356D48845D3E10C5D450AE1F22 dispensa.ps1
+8A75CD130CF0D876F0B4BE9EE36D0BB40A1AF386D41C19FAE3C0679E1DB9E86C lancador.ps1
+9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56 razao.ps1
+98FABF981F5922AB745065B851AAABFB0902C173F9B4863D1C081A04192546FE claude-com-teto.cmd
+DEE2194014B2AA9A0460D6152C21E7679110F4315214681C5797C61236E7D9EF fake-executor.ps1
+C92723AB9EDFED2B0A527385FF85EFC6751A5C828C6E0CB4A45BACEC1CBDED6C testar-b05.ps1
+##### PARTE 1 — bateria simulada
+== N7 + N8: chamada normal pelo controlador congelado
+  [ok] controlador terminou (0) e T1 done
+  [ok] razão: inicio e fim com custo 0.30
+  [ok] N8: argumentos do controlador preservados + --max-budget-usd 0.5 no fim
+  [ok] N8: stdin (prompt da tarefa) chegou ao executor
+  [ok] N8: cwd do executor é o repo
+  [ok] E1: razão (conhecido) = estado.json do controlador
+  [ok] P1: executor registrado dentro de um Job Object (IsProcessInJob)
+== N8: código de saída e JSON de erro preservados
+  [ok] controlador viu código 3 do executor (falhou, T1 failed)
+  [ok] razão: fim com custo 0.02 do JSON de erro
+== N9: várias chamadas esgotam o orçamento (0.30 cada; reserva 0.625; orçamento 1.60)
+  [ok] T1–T4 done, T5 failed
+  [ok] 4 inicios, 1 bloqueado, executor chamado 4 vezes
+  [ok] sem dupla cobrança: razão 1.20 = estado.json 1.20
+== N3: saldo insuficiente antes de iniciar
+  [ok] código 23, controlador não iniciou, executor não chamado
+== N10: falha de associação ao job / handle herdável
+  [ok] associação falha → código 24, controlador não iniciou
+  [ok] handle herdável → código 24, controlador não iniciou
+== N4: processo antigo vivo (PID + criação) e PID reutilizado
+  [ok] processo antigo vivo → código 22
+  [ok] mesmo PID com outra criação (reutilizado) → não bloqueia
+== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)
+  [ok] N1: executor estava no job antes da queda
+  [ok] N5: segunda instância para o mesmo EstadoDir → código 20
+  [ok] N1: executor morto em ≤ 5 s (PID + criação)
+  [ok] N1: controlador morto
+  [ok] N1: varredura só verifica (nenhum evento de associação nem violação)
+  [ok] N1: tarefa ficou in_progress para a retomada
+  [ok] N2: chamada derrubada reservada (0.625), não zero
+  [ok] N6: retomada concluiu T1 (0)
+  [ok] N6: total = 0.625 (derrubada) + 0.30 (nova)
+  [ok] N6: um único commit da tarefa
+== E4: razão com linha parcial bloqueia
+  [ok] código 21, nada iniciado
+== N11: pwsh empacotado (Microsoft Store) ou hash diferente → 27
+  [ok] lançador no pwsh da Store → código 27, nada iniciado
+  [ok] hash do pwsh diferente do fixado → código 27, nada iniciado
+== N12: violação VERDADEIRA (executor → pwsh da Store → cmd → ping) → 29, externos mortos, próxima partida recusada
+  [ok] lançador saiu com 29 antes do fim natural do executor
+  [ok] contencao_violada durável com processo real fora do job
+  [ok] externos_encerramento gravado
+  [ok] conferência externa: nenhum ping da cadeia vivo
+  [ok] conferência externa: pwsh da Store da cadeia morto
+  [ok] conferência externa: executor morto
+  [ok] partida seguinte recusada (29) sem LIBERACAO_HUMANA, executor não chamado
+  [ok] com LIBERACAO_HUMANA (id da execução) → retoma e conclui T1
+== N13: dois EstadoDir com o mesmo RazaoDir em paralelo → 20
+  [ok] segunda execução recusada com 20
+  [ok] configuração da primeira intacta e somente-leitura
+== N14: estado.json divergente do razão → 28 antes de iniciar
+  [ok] primeira execução ok e reconciliada (estado 0.60 = base 0 + conhecido 0.60)
+  [ok] divergência → 28, executor não chamado
+== N15: falha forçada na gravação do pid → executor encerrado, reserva mantida, erro
+  [ok] chamada falhou rápido (executor encerrado, sem esperar 60 s)
+  [ok] sem evento pid nem fim; reserva 0.625 mantida
+  [ok] notas.txt intacto (executor não alterou nada)
+== N16: reutilização sequencial do razão por outro estado → 30, razão inalterado
+  [ok] outro estado com razão vinculado → 30
+  [ok] RazaoDir byte a byte inalterado
+  [ok] estado vinculado apontado para outro razão → 30, novo razão vazio
+== N17 + H8: custo histórico entra no orçamento e na reconciliação
+  [ok] base 2.60 + reserva 0.625 > 3 → código 23, executor não chamado
+  [ok] base_historica gravada uma vez com 2.60
+  [ok] segunda tentativa: ainda 23 e base não regravada
+  [ok] H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done
+== N19: custo inválido do executor (negativo, texto, não finito) → desconhecido, reserva conservada
+  [ok] negativo: fim com custo desconhecido, reserva 0.625 conservada, conhecido 0
+  [FALHOU] negativo: lançador 29 e estado reconciliado (estado = B + K) → estado -5
+  [ok] texto: fim com custo desconhecido, reserva 0.625 conservada, conhecido 0
+  [ok] texto: controlador contabilizou outro valor → 28 (fecha), partida seguinte também 28 sem chamar o executor
+  [ok] nao_finito: fim com custo desconhecido, reserva 0.625 conservada, conhecido 0
+  [ok] nao_finito: controlador contabilizou outro valor → 28 (fecha), partida seguinte também 28 sem chamar o executor
+== N20: processo não legítimo tenta enquadrar-se na exceção do conhost.exe
+  [ok] N20a: conhost.exe falso (caminho fora do System32) → não dispensado
+  [ok] N20b: conhost.exe verdadeiro criado após a associação → não dispensado
+  [ok] N20c (controle): conhost.exe verdadeiro, pai certo, criado antes → dispensável
+  [ok] N20d: pai diferente do lançador → não dispensado
+  [ok] N20e: criado antes do lançador (PID reutilizado) → não dispensado
+  [ok] N20f: processo com pai falsificado criado (teste válido)
+  [ok] N20f: não consta como pré-existente dispensado
+  [ok] N20f: tratado como qualquer descendente (contido pelo job e morto no fim, ou violação 29) — nunca sobrevive
+TOTAL B05: 65 / 66
+código: 1
+##### PARTE 2 — sonda Low IL
+rótulos: L= | R= | M=(sem rótulo = médio)
+Low pwsh: 35952|1
+sentinela médio ainda vivo: True
+razão intacto: True | LIBERACAO criada: False
+claude: C:\Users\piloto\.local\bin\claude.exe
+claude -p em Low IL: 29088|1
+   saída: {"duration_api_ms":0,"stop_reason":"stop_sequence","session_id":"d1cd63ba-95c3-42ec-8400-2f8ce588d880","total_cost_usd":0,"usage":{"output_tokens_details":{"thinking_tokens":0},"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[],"speed":"standard","fallback_credit":null},"modelUsage":{},"permission_denials":[],"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"safety_stops":0,"is_error":true,"num_turns":1,"subtype":"success","api_error_status":401,"api_error_origin":"first_party","result":"Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue.","type":"result","duration_ms":2767,"uuid":"43f93cc6-ab8d-47c7-8e4a-43f3d7e6a5d0","queued_turn_count":0,"result_index":0} 
+   erro:  
+=== FIM 2026-10-22T13:50:35
