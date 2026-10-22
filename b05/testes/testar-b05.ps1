@@ -235,6 +235,19 @@ $r = Rodar-Lancador $a 3 'ok:0.30'
 $cont = Razao-Contabilizar (Eventos $a) 0.25; $est = Get-Content "$($a.Estado)\estado.json" -Raw | ConvertFrom-Json
 Checar 'H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done' ($r.Codigo -eq 0 -and $cont.Base -eq 0.3 -and [math]::Abs([double]$est.custo_acumulado_usd - 0.6) -lt 1e-6 -and (Status $a) -eq 'T1=done T2=done') "código $($r.Codigo) base $($cont.Base) estado $($est.custo_acumulado_usd) $(Status $a) $($r.Saida)"
 
+"== N18b (E84-02/E84-03): executor em BAIXA integridade tenta subverter razão/liberação/.git → tudo negado; tarefa normal segue"
+$a = Novo-Ambiente 1
+$r = Rodar-Lancador $a 3 'atacar' @('-BaixaIntegridade')
+$ev = Eventos $a; $pidEv = @($ev | Where-Object evento -eq 'pid')
+$ataque = if (Test-Path "$($a.Repo)\ataque.txt") { Get-Content "$($a.Repo)\ataque.txt" -Raw } else { '(sem arquivo)' }
+$cfgRest = @(Get-ChildItem "$($a.Razao)\config-*.json" -ErrorAction SilentlyContinue)
+Checar 'N18b: executor registrado em baixa integridade (nivel_il 4096)' ($pidEv.Count -eq 1 -and [int]$pidEv[0].nivel_il -eq 4096) "nivel $($pidEv.nivel_il)"
+Checar 'N18b: todas as 5 tentativas de subversão NEGADAS' ($ataque -notmatch '=OK') $ataque
+Checar 'N18b: razão sem evento forjado e sem LIBERACAO_HUMANA' (-not @($ev | Where-Object evento -eq 'forjado').Count -and -not (Test-Path "$($a.Razao)\LIBERACAO_HUMANA.txt")) 'razão subvertido'
+Checar 'N18b: config-<execucao>.json preservado' ($cfgRest.Count -eq 1)
+Checar 'N18b: .git intacto (sem hook plantado, sem [x] no config)' (-not (Test-Path "$($a.Repo)\.git\hooks\pre-commit") -and (Get-Content "$($a.Repo)\.git\config" -Raw) -notmatch '\[x\]')
+Checar 'N18b: apesar dos ataques, T1 done e custo 0.30 contabilizado' ($r.Codigo -eq 0 -and (Status $a) -eq 'T1=done' -and [math]::Abs((Razao-Contabilizar $ev 0.25).Conhecido - 0.30) -lt 1e-6) "código $($r.Codigo) $(Status $a)"
+
 "== N19-R (E84-01): custo inválido rejeitado ANTES do controlador — sem commit, reserva mantida, trava financeira, parada determinística"
 foreach ($caso in @(@('negativo', '{"type":"result","is_error":false,"result":"x","total_cost_usd":-5}'),
                     @('texto', '{"type":"result","is_error":false,"result":"x","total_cost_usd":"0.3"}'),

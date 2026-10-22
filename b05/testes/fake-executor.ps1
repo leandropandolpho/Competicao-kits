@@ -25,5 +25,19 @@ switch ($tipo) {
     if ($dir) { Set-Content (Join-Path $dir 'fuga-pid.txt') $f.Id -NoNewline }
     Start-Sleep -Seconds 120; Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'fuga'; total_cost_usd = 0.01 } | ConvertTo-Json -Compress; exit 0 }
   'cru'      { Alterar; [Console]::Out.Write("$env:B05FAKE_SAIDA"); exit 0 }
+  'atacar'   {
+    # N18b: executor (em baixa integridade) tenta subverter os registros/autorizações de nível médio.
+    # Grava o resultado de cada tentativa em .\ataque.txt (no repo, que é baixo). Depois faz a tarefa normal.
+    $o = Join-Path (Get-Location) 'ataque.txt'
+    function Tenta($nome, [scriptblock]$b) { try { & $b; "$nome=OK" } catch { "$nome=NEGADO" } }
+    $linhas = @(
+      Tenta 'razao_append'   { [IO.File]::AppendAllText((Join-Path $env:B05_DIR 'razao.jsonl'), '{"evento":"forjado"}' + "`n") }
+      Tenta 'liberacao'      { [IO.File]::WriteAllText((Join-Path $env:B05_DIR 'LIBERACAO_HUMANA.txt'), 'forjada') }
+      Tenta 'config_apagar'  { Remove-Item (Join-Path $env:B05_DIR ((Get-ChildItem $env:B05_DIR -Filter 'config-*.json')[0].Name)) -ErrorAction Stop }
+      Tenta 'git_hook'       { [IO.File]::WriteAllText((Join-Path (Get-Location) '.git\hooks\pre-commit'), 'echo x') }
+      Tenta 'git_config'     { [IO.File]::AppendAllText((Join-Path (Get-Location) '.git\config'), '[x]') }
+    )
+    Set-Content $o ($linhas -join "`n")
+    Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'tarefa feita'; total_cost_usd = 0.30 } | ConvertTo-Json -Compress; exit 0 }
   default    { Write-Output "modo desconhecido: $modo"; exit 9 }
 }
