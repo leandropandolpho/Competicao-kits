@@ -292,6 +292,13 @@ Remove-Item Env:B05_TESTE_VARREDURA_FALHA
 $ev = Eventos $a
 Checar 'N18h: reparse_detectado com ok_varredura=false, execução falhou, sem commit' (@($ev | Where-Object { $_.evento -eq 'reparse_detectado' -and $_.ok_varredura -eq $false }).Count -ge 1 -and $r.Codigo -ne 0 -and (git -C $a.Repo rev-parse HEAD) -eq $base0) "código $($r.Codigo)"
 
+"== N18i (B05-F09-R): leitura de rótulo INDETERMINADA (erro) em .git → falha fechada (código 31), não presume médio"
+$a = Novo-Ambiente 1
+$env:B05_TESTE_ROTULO_ERRO = '.git'   # força InfoLabel a parecer indeterminado para caminhos com .git
+$r = Rodar-Lancador $a 3 'ok:0.30' @('-BaixaIntegridade')
+Remove-Item Env:B05_TESTE_ROTULO_ERRO
+Checar 'N18i: rótulo indeterminado → bloqueio 31, controlador não iniciou' ($r.Codigo -eq 31 -and -not (Test-Path "$($a.Estado)\estado.json")) "código $($r.Codigo): $($r.Saida)"
+
 "== N19-R (E84-01): custo inválido rejeitado ANTES do controlador — sem commit, reserva mantida, trava financeira, parada determinística"
 foreach ($caso in @(@('negativo', '{"type":"result","is_error":false,"result":"x","total_cost_usd":-5}'),
                     @('texto', '{"type":"result","is_error":false,"result":"x","total_cost_usd":"0.3"}'),

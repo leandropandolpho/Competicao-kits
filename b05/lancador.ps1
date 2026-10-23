@@ -203,22 +203,31 @@ if ($BaixaIntegridade) {
   Icacls-Ok $RepoPath /setintegritylevel '(OI)(CI)low' /Q
   # A raiz ganhou um rótulo BAIXO herdável; .git não tinha rótulo próprio e passaria a HERDAR baixo (achado N18b/049).
   # Rótulo MÉDIO explícito em .git e em toda a sua subárvore sobrepõe a herança: o executor baixo não escreve lá.
+  # .git: a subárvore inteira vai a MÉDIO (icacls /T, sobrepõe a herança baixa da raiz) e, para que a releitura confirme
+  # um rótulo EXPLÍCITO e verificável, .git e .git/config recebem rótulo médio explícito (RotularMedio → "8192|1").
   $gitDir = Join-Path $RepoPath '.git'
-  if ((Test-Path -LiteralPath $gitDir) -and $env:B05_TESTE_FALHAR_ROTULO -ne '1') { Icacls-Ok $gitDir /setintegritylevel '(OI)(CI)medium' /T /Q }
+  if ((Test-Path -LiteralPath $gitDir) -and $env:B05_TESTE_FALHAR_ROTULO -ne '1') {
+    Icacls-Ok $gitDir /setintegritylevel '(OI)(CI)medium' /T /Q
+    $mm = [B05LowIL]::RotularMedio($gitDir); if ($mm) { Parar 26 "falha ao rotular .git médio: $mm" }
+    if (Test-Path -LiteralPath "$gitDir\config") { $mm = [B05LowIL]::RotularMedio("$gitDir\config"); if ($mm) { Parar 26 "falha ao rotular .git/config médio: $mm" } }
+  }
   # E84-03: NO_READ_UP nas pastas com SEGREDOS/registros — o executor baixo não LÊ a chave da supervisora nem o razão.
   # NÃO no EstadoDir: o controlador grava ali o settings-executor.json que o Claude PRECISA ler (achado 072/073); o
   # estado.json é dado de custo (não credencial) e já está protegido contra escrita pelo nível de integridade.
   foreach ($p in @($RazaoDir, (Join-Path $env:USERPROFILE '.supervisora'))) {
     if (Test-Path -LiteralPath $p) { $mr = [B05LowIL]::RotularNRNW($p); if ($mr) { Parar 26 "falha ao proteger '$p' (NO_READ_UP): $mr" } }
   }
-  # B05-F09: RELER e VERIFICAR os rótulos efetivos dos recursos críticos; qualquer divergência ⇒ bloqueio (código 31).
-  function Rid([string]$p) { $i = [B05LowIL]::InfoLabel($p); if ("$i" -match '^\d') { [int](($i -split '\|')[0]) } elseif ("$i" -eq 'nenhum' -or "$i" -eq 'nao-ml') { 8192 } else { -1 } }
+  # B05-F09-R: RELER e VERIFICAR os rótulos efetivos; QUALQUER resultado INDETERMINADO (erro de leitura, ausência de
+  # rótulo exigido, não-ML) também ⇒ bloqueio (código 31). Nunca presumir nível quando a leitura não é afirmativa.
   function Verif([string]$p, [bool]$deveSerBaixo, [bool]$exigeNR) {
     if (-not (Test-Path -LiteralPath $p)) { return }
-    $i = [B05LowIL]::InfoLabel($p); $rid = Rid $p
-    if ($deveSerBaixo -and $rid -ne 4096) { Parar 31 "verificação de rótulo: '$p' deveria ser BAIXO (4096), está '$i'" }
-    if (-not $deveSerBaixo -and $rid -eq 4096) { Parar 31 "verificação de rótulo: '$p' NÃO pode ser baixo (4096), está '$i'" }
-    if ($exigeNR) { $mask = if ("$i" -match '\|') { [int](($i -split '\|')[1]) } else { 0 }; if (-not ($mask -band 2)) { Parar 31 "verificação de rótulo: '$p' deveria ter NO_READ_UP (mask&2), está '$i'" } }
+    $i = "$([B05LowIL]::InfoLabel($p))"
+    if ($env:B05_TESTE_ROTULO_ERRO -and $p -like "*$($env:B05_TESTE_ROTULO_ERRO)*") { $i = 'erro:teste' }   # injeção p/ N18i
+    if ($i -notmatch '^\d+\|\d+$') { Parar 31 "verificação de rótulo INDETERMINADA em '$p' (resultado '$i') — falha fechada" }
+    $rid = [int](($i -split '\|')[0]); $mask = [int](($i -split '\|')[1])
+    if ($deveSerBaixo) { if ($rid -ne 4096) { Parar 31 "verificação: '$p' deveria ser BAIXO (4096), está '$i'" } }
+    else { if ($rid -lt 8192) { Parar 31 "verificação: '$p' deveria ser MÉDIO+ verificável (>=8192), está '$i'" } }
+    if ($exigeNR -and -not ($mask -band 2)) { Parar 31 "verificação: '$p' deveria ter NO_READ_UP (mask&2), está '$i'" }
   }
   Verif $RepoPath $true $false
   $amostra = @(Get-ChildItem -LiteralPath $RepoPath -File -Force | Where-Object { $_.Name -ne '.git' } | Select-Object -First 1)

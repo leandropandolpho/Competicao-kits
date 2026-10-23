@@ -37,9 +37,13 @@ public static class B05LowIL {
   // E84-03: rótulo de integridade MÉDIO com NO_WRITE_UP + NO_READ_UP + NO_EXECUTE_UP (SDDL "S:(ML;OICI;NRNWNX;;;ME)"),
   // herdável. Processos abaixo de médio não leem/escrevem/executam o alvo. Médio+ continuam normais. Não exige admin.
   // type: SE_FILE_OBJECT=1. info: LABEL_SECURITY_INFORMATION=0x10. Devolve "" ou erro.
-  public static string RotularNRNW(string caminho) {
+  public static string RotularNRNW(string caminho) { return RotularSacl(caminho, "S:(ML;OICI;NRNWNX;;;ME)"); }
+  // B05-F09-R: rótulo MÉDIO explícito e herdável (NO_WRITE_UP), para que a releitura confirme um rótulo verificável
+  // (icacls medium pode não deixar ACE explícito; aqui garantimos "8192|1" legível por InfoLabel).
+  public static string RotularMedio(string caminho) { return RotularSacl(caminho, "S:(ML;OICI;NW;;;ME)"); }
+  static string RotularSacl(string caminho, string sddl) {
     IntPtr sd; uint sz;
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW("S:(ML;OICI;NRNWNX;;;ME)", 1, out sd, out sz)) return "ConvertSD " + Marshal.GetLastWin32Error();
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out sd, out sz)) return "ConvertSD " + Marshal.GetLastWin32Error();
     try {
       bool pres, def; IntPtr sacl;
       if (!GetSecurityDescriptorSacl(sd, out pres, out sacl, out def) || !pres) return "GetSacl " + Marshal.GetLastWin32Error();
