@@ -149,7 +149,7 @@ if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { Parar 24 "Se
 $fl = [B05Job]::Flags($job)
 if ($fl -lt 0) { Parar 24 'QueryInformationJobObject falhou' }
 if (-not ($fl -band [B05Job]::KILL_ON_JOB_CLOSE) -or ($fl -band [B05Job]::BREAKAWAY_OK) -or ($fl -band [B05Job]::SILENT_BREAKAWAY_OK)) { Parar 24 ("limites do job inesperados: 0x{0:X}" -f $fl) }
-if ($BaixaIntegridade -and -not $env:B05_SEM_UILIMIT) { if (-not [B05Job]::RestringirUI($job)) { Parar 24 "restrições de UI do job falharam ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" } }   # E84-04 (B05_SEM_UILIMIT: diagnóstico)
+if ($BaixaIntegridade) { if (-not [B05Job]::RestringirUI($job)) { Parar 24 "restrições de UI do job falharam ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" } }   # E84-04 (B05-F11: sem bypass)
 if ($TesteHandleHerdavel) { [B05Job]::SetHandleInformation($job, [B05Job]::HANDLE_FLAG_INHERIT, [B05Job]::HANDLE_FLAG_INHERIT) | Out-Null }
 $hf = [uint32]0
 if (-not [B05Job]::GetHandleInformation($job, [ref]$hf)) { Parar 24 'GetHandleInformation falhou' }
@@ -194,20 +194,39 @@ if ($BaixaIntegridade) {
   New-Item -ItemType Directory -Force $baixoDir | Out-Null
   & icacls $baixoDir /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
   $env:B05_BAIXO_DIR = $baixoDir
+  . (Join-Path $PSScriptRoot 'baixa-integridade.ps1')
   # G2: a árvore de trabalho do repositório fica BAIXA (o executor baixo edita o código), mas .git fica MÉDIO
   # (o executor não planta hooks nem reescreve histórico; o controlador médio continua escrevendo por write-down).
-  Get-ChildItem -LiteralPath $RepoPath -Force | Where-Object Name -ne '.git' | ForEach-Object { & icacls $_.FullName /setintegritylevel '(OI)(CI)low' /T /Q 2>&1 | Out-Null }
-  & icacls $RepoPath /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
+  # B05-F09: cada icacls é conferido pelo código de retorno; os rótulos resultantes são RELIDOS e verificados abaixo.
+  function Icacls-Ok { $r = & icacls @args 2>&1; if ($LASTEXITCODE -ne 0) { Parar 26 "icacls falhou ($LASTEXITCODE) em: $args — $r" } }
+  foreach ($e in @(Get-ChildItem -LiteralPath $RepoPath -Force | Where-Object Name -ne '.git')) { Icacls-Ok $e.FullName /setintegritylevel '(OI)(CI)low' /T /Q }
+  Icacls-Ok $RepoPath /setintegritylevel '(OI)(CI)low' /Q
   # A raiz ganhou um rótulo BAIXO herdável; .git não tinha rótulo próprio e passaria a HERDAR baixo (achado N18b/049).
   # Rótulo MÉDIO explícito em .git e em toda a sua subárvore sobrepõe a herança: o executor baixo não escreve lá.
-  if (Test-Path -LiteralPath (Join-Path $RepoPath '.git')) { & icacls (Join-Path $RepoPath '.git') /setintegritylevel '(OI)(CI)medium' /T /Q 2>&1 | Out-Null }
+  $gitDir = Join-Path $RepoPath '.git'
+  if ((Test-Path -LiteralPath $gitDir) -and $env:B05_TESTE_FALHAR_ROTULO -ne '1') { Icacls-Ok $gitDir /setintegritylevel '(OI)(CI)medium' /T /Q }
   # E84-03: NO_READ_UP nas pastas com SEGREDOS/registros — o executor baixo não LÊ a chave da supervisora nem o razão.
   # NÃO no EstadoDir: o controlador grava ali o settings-executor.json que o Claude PRECISA ler (achado 072/073); o
   # estado.json é dado de custo (não credencial) e já está protegido contra escrita pelo nível de integridade.
-  . (Join-Path $PSScriptRoot 'baixa-integridade.ps1')
   foreach ($p in @($RazaoDir, (Join-Path $env:USERPROFILE '.supervisora'))) {
     if (Test-Path -LiteralPath $p) { $mr = [B05LowIL]::RotularNRNW($p); if ($mr) { Parar 26 "falha ao proteger '$p' (NO_READ_UP): $mr" } }
   }
+  # B05-F09: RELER e VERIFICAR os rótulos efetivos dos recursos críticos; qualquer divergência ⇒ bloqueio (código 31).
+  function Rid([string]$p) { $i = [B05LowIL]::InfoLabel($p); if ("$i" -match '^\d') { [int](($i -split '\|')[0]) } elseif ("$i" -eq 'nenhum' -or "$i" -eq 'nao-ml') { 8192 } else { -1 } }
+  function Verif([string]$p, [bool]$deveSerBaixo, [bool]$exigeNR) {
+    if (-not (Test-Path -LiteralPath $p)) { return }
+    $i = [B05LowIL]::InfoLabel($p); $rid = Rid $p
+    if ($deveSerBaixo -and $rid -ne 4096) { Parar 31 "verificação de rótulo: '$p' deveria ser BAIXO (4096), está '$i'" }
+    if (-not $deveSerBaixo -and $rid -eq 4096) { Parar 31 "verificação de rótulo: '$p' NÃO pode ser baixo (4096), está '$i'" }
+    if ($exigeNR) { $mask = if ("$i" -match '\|') { [int](($i -split '\|')[1]) } else { 0 }; if (-not ($mask -band 2)) { Parar 31 "verificação de rótulo: '$p' deveria ter NO_READ_UP (mask&2), está '$i'" } }
+  }
+  Verif $RepoPath $true $false
+  $amostra = @(Get-ChildItem -LiteralPath $RepoPath -File -Force | Where-Object { $_.Name -ne '.git' } | Select-Object -First 1)
+  if ($amostra.Count) { Verif $amostra[0].FullName $true $false }
+  if (Test-Path -LiteralPath $gitDir) { Verif $gitDir $false $false; if (Test-Path -LiteralPath "$gitDir\config") { Verif "$gitDir\config" $false $false } }
+  Verif $RazaoDir $false $true
+  $supKey = Join-Path $env:USERPROFILE '.supervisora'
+  if (Test-Path -LiteralPath $supKey) { Verif $supKey $false $true }
   # E84-03: cópia da config do Claude em nível BAIXO (o executor real precisa escrever sessão/cache; não toca em ~/.claude).
   $cliHome = Join-Path $baixoDir 'clihome'; New-Item -ItemType Directory -Force $cliHome | Out-Null
   if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.claude')) { Copy-Item (Join-Path $env:USERPROFILE '.claude\*') $cliHome -Recurse -Force -ErrorAction SilentlyContinue }

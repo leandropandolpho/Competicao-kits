@@ -239,15 +239,16 @@ Checar 'H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done' ($r.Codigo -eq 0 
 $a = Novo-Ambiente 1
 $cred = "$($a.Base)\segredo.key"; Set-Content $cred 'CHAVE-SECRETA'
 . (Join-Path $PSScriptRoot '../baixa-integridade.ps1'); [void][B05LowIL]::RotularNRNW($cred)   # credencial média NO_READ_UP
-$env:B05FAKE_RAZAO = $a.Razao; $env:B05FAKE_CRED = $cred
+$env:B05FAKE_RAZAO = $a.Razao; $env:B05FAKE_CRED = $cred; $env:B05FAKE_ESTADO = $a.Estado
 $r = Rodar-Lancador $a 3 'atacar' @('-BaixaIntegridade')
-Remove-Item Env:B05FAKE_RAZAO, Env:B05FAKE_CRED
+Remove-Item Env:B05FAKE_RAZAO, Env:B05FAKE_CRED, Env:B05FAKE_ESTADO
 $ev = Eventos $a; $pidEv = @($ev | Where-Object evento -eq 'pid')
 $ataque = if (Test-Path "$($a.Repo)\ataque.txt") { Get-Content "$($a.Repo)\ataque.txt" -Raw } else { '(sem arquivo)' }
 $cfgRest = @(Get-ChildItem "$($a.Razao)\config-*.json" -ErrorAction SilentlyContinue)
 Checar 'N18b: executor registrado em baixa integridade (nivel_il 4096)' ($pidEv.Count -eq 1 -and [int]$pidEv[0].nivel_il -eq 4096) "nivel $($pidEv.nivel_il)"
-Checar 'N18b/N18e: TODAS as tentativas (subverter E ler) NEGADAS' ($ataque -notmatch '=OK') $ataque
+Checar 'N18b/N18e: toda SUBVERSÃO/ESCRITA/leitura-de-segredo NEGADA (só settings_ler é OK)' (($ataque -split "`n" | Where-Object { $_ -match '=OK' -and $_ -notmatch '^settings_ler=' }).Count -eq 0) $ataque
 Checar 'N18e: credencial e razão não lidos; ambiente sem segredos (sem vars vazadas)' ($ataque -match 'credencial_ler=NEGADO' -and $ataque -match 'razao_ler=NEGADO' -and $ataque -match 'vars_vazadas=NEGADO') $ataque
+Checar 'N18f: EstadoDir legível (settings) mas NÃO gravável pelo executor baixo' ($ataque -match 'settings_ler=OK' -and $ataque -match 'estado_escrever=NEGADO' -and $ataque -match 'settings_escrever=NEGADO') $ataque
 Checar 'N18b: razão sem evento forjado e sem LIBERACAO_HUMANA' (-not @($ev | Where-Object evento -eq 'forjado').Count -and -not (Test-Path "$($a.Razao)\LIBERACAO_HUMANA.txt")) 'razão subvertido'
 Checar 'N18b: config-<execucao>.json preservado' ($cfgRest.Count -eq 1)
 Checar 'N18b: .git intacto (sem hook plantado, sem [x] no config)' (-not (Test-Path "$($a.Repo)\.git\hooks\pre-commit") -and (Get-Content "$($a.Repo)\.git\config" -Raw) -notmatch '\[x\]')
@@ -273,6 +274,23 @@ $base0 = git -C $a.Repo rev-parse HEAD
 $r = Rodar-Lancador $a 3 'ok:0.30' @('-BaixaIntegridade')
 $ev = Eventos $a
 Checar 'N18c-2: reparse_detectado gravado, execução falhou, sem commit' (@($ev | Where-Object evento -eq 'reparse_detectado').Count -ge 1 -and $r.Codigo -ne 0 -and (git -C $a.Repo rev-parse HEAD) -eq $base0) "código $($r.Codigo)"
+
+"== N18g (B05-F09): .git acaba em baixa integridade e o re-rótulo médio falha → a verificação do lançador bloqueia (31)"
+$a = Novo-Ambiente 1
+& icacls "$($a.Repo)\.git" /setintegritylevel '(OI)(CI)low' /T /Q 2>&1 | Out-Null   # força .git baixo
+$env:B05_TESTE_FALHAR_ROTULO = '1'   # faz o lançador PULAR o re-rótulo médio de .git (simula falha parcial)
+$r = Rodar-Lancador $a 3 'ok:0.30' @('-BaixaIntegridade')
+Remove-Item Env:B05_TESTE_FALHAR_ROTULO
+Checar 'N18g: lançador relê o rótulo, vê .git baixo e bloqueia com 31 (controlador não iniciou)' ($r.Codigo -eq 31 -and -not (Test-Path "$($a.Estado)\estado.json")) "código $($r.Codigo): $($r.Saida)"
+
+"== N18h (B05-F10): varredura de reparse points incompleta → falha fechada (não é 'sem junctions')"
+$a = Novo-Ambiente 1
+$base0 = git -C $a.Repo rev-parse HEAD
+$env:B05_TESTE_VARREDURA_FALHA = '1'
+$r = Rodar-Lancador $a 3 'ok:0.30' @('-BaixaIntegridade')
+Remove-Item Env:B05_TESTE_VARREDURA_FALHA
+$ev = Eventos $a
+Checar 'N18h: reparse_detectado com ok_varredura=false, execução falhou, sem commit' (@($ev | Where-Object { $_.evento -eq 'reparse_detectado' -and $_.ok_varredura -eq $false }).Count -ge 1 -and $r.Codigo -ne 0 -and (git -C $a.Repo rev-parse HEAD) -eq $base0) "código $($r.Codigo)"
 
 "== N19-R (E84-01): custo inválido rejeitado ANTES do controlador — sem commit, reserva mantida, trava financeira, parada determinística"
 foreach ($caso in @(@('negativo', '{"type":"result","is_error":false,"result":"x","total_cost_usd":-5}'),

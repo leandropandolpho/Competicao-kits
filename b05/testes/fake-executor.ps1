@@ -35,7 +35,7 @@ switch ($tipo) {
   'atacar'   {
     # N18b/N18e: executor (em baixa integridade) tenta subverter E LER registros/credenciais de nível médio.
     # Alvos vêm por B05FAKE_* (o ambiente higienizado da E84-03 removeu B05_DIR). Resultado em .\ataque.txt (repo baixo).
-    $rz = $env:B05FAKE_RAZAO; $cred = $env:B05FAKE_CRED
+    $rz = $env:B05FAKE_RAZAO; $cred = $env:B05FAKE_CRED; $est = $env:B05FAKE_ESTADO
     $o = Join-Path (Get-Location) 'ataque.txt'
     function Tenta($nome, [scriptblock]$b) { try { & $b | Out-Null; "$nome=OK" } catch { "$nome=NEGADO" } }
     $linhas = @(
@@ -47,6 +47,10 @@ switch ($tipo) {
       Tenta 'git_hook'       { [IO.File]::WriteAllText((Join-Path (Get-Location) '.git\hooks\pre-commit'), 'echo x') }
       Tenta 'git_config'     { [IO.File]::AppendAllText((Join-Path (Get-Location) '.git\config'), '[x]') }
       Tenta 'vars_vazadas'   { if ($env:B05_DIR -or $env:B05_EXECUCAO -or $env:OPENAI_API_KEY) { 'vazou' } else { throw 'limpo' } }
+      # N18f (condição do ChatGPT no Ato 094): o EstadoDir é legível (settings), mas o executor baixo NÃO pode ESCREVER nele.
+      Tenta 'estado_escrever'   { if ($est) { [IO.File]::AppendAllText((Join-Path $est 'estado.json'), 'x') } else { throw 'sem est' } }
+      Tenta 'settings_escrever' { if ($est) { [IO.File]::AppendAllText((Join-Path $est 'settings-executor.json'), 'x') } else { throw 'sem est' } }
+      Tenta 'settings_ler'      { if ($est) { [IO.File]::ReadAllText((Join-Path $est 'settings-executor.json')) } else { throw 'sem est' } }
     )
     Set-Content $o ($linhas -join "`n")
     Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'tarefa feita'; total_cost_usd = 0.30 } | ConvertTo-Json -Compress; exit 0 }

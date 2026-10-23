@@ -10,9 +10,10 @@ $Utf8 = [System.Text.UTF8Encoding]::new($false)
 if (-not $args -or $args.Count -eq 0) { [Console]::Error.Write('baixo-exec: sem comando'); exit 96 }
 $cwd = (Get-Location).Path
 
-# E84-05: reparse points na árvore de trabalho ⇒ falha fechada antes de qualquer execução.
-$rep = @(B05LowIL-ReparsePoints $cwd)
-if ($rep.Count) { [Console]::Error.Write("baixo-exec: reparse point/junction ($($rep -join '; ')) — abortado"); exit 29 }
+# E84-05/F10: reparse points OU varredura incompleta na árvore de trabalho ⇒ falha fechada antes de qualquer execução.
+$rep = B05LowIL-ReparsePoints $cwd
+if (-not $rep.Ok) { [Console]::Error.Write('baixo-exec: varredura de reparse points NÃO completou — abortado'); exit 29 }
+if (@($rep.Pontos).Count) { [Console]::Error.Write("baixo-exec: reparse point/junction ($(@($rep.Pontos) -join '; ')) — abortado"); exit 29 }
 
 if (-not $IsWindows) { [Console]::Error.Write('baixo-exec exige Windows'); exit 95 }
 

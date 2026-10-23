@@ -48,6 +48,29 @@ public static class B05LowIL {
     } finally { LocalFree(sd); }
   }
 
+  // B05-F09: lê o rótulo de integridade EFETIVO de um arquivo/pasta. Devolve "rid|mask" (rid 4096 baixo, 8192 médio,
+  // 12288 alto; mask: NW=1 NR=2 NX=4), "nenhum" (sem rótulo explícito = médio por padrão), ou "erro:<n>".
+  [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern uint GetNamedSecurityInfoW(string name, int type, uint info, IntPtr owner, IntPtr grp, IntPtr dacl, out IntPtr sacl, out IntPtr sd);
+  [DllImport("advapi32.dll")] static extern bool GetAce(IntPtr acl, int index, out IntPtr ace);
+  public static string InfoLabel(string caminho) {
+    IntPtr sacl, sd;
+    uint rc = GetNamedSecurityInfoW(caminho, 1, 0x10, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out sacl, out sd);
+    if (rc != 0) return "erro:" + rc;
+    try {
+      if (sacl == IntPtr.Zero) return "nenhum";
+      int count = Marshal.ReadInt16(sacl, 4);
+      if (count < 1) return "nenhum";
+      IntPtr ace;
+      if (!GetAce(sacl, 0, out ace)) return "erro:getace";
+      if (Marshal.ReadByte(ace, 0) != 0x11) return "nao-ml";   // SYSTEM_MANDATORY_LABEL_ACE
+      uint mask = (uint)Marshal.ReadInt32(ace, 4);
+      IntPtr sid = (IntPtr)(ace.ToInt64() + 8);
+      int cont = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+      uint rid = (uint)Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(cont - 1)));
+      return rid + "|" + mask;
+    } finally { if (sd != IntPtr.Zero) LocalFree(sd); }
+  }
+
   // Token de baixa integridade + restrito (sem privilégios). Devolve "" ou a mensagem de erro.
   public static string CriarToken(out IntPtr tokenBaixo) {
     tokenBaixo = IntPtr.Zero; IntPtr t, restrito, dup, sid;
@@ -110,15 +133,22 @@ function B05LowIL-Cmdline([string]$exe, [string[]]$argumentos, [string]$inFile, 
 
 # E84-05: pontos de reparse (junctions, symlinks) sob $raiz. O executor baixo pode criar uma junction na árvore de
 # trabalho apontando para uma pasta média; se o controlador médio (git, teste) a atravessar, operaria com autoridade
-# média no alvo. Qualquer reparse encontrado ⇒ falha fechada antes de qualquer ação de nível médio.
+# média no alvo. Qualquer reparse ⇒ falha fechada. B05-F10: QUALQUER falha de enumeração também ⇒ falha fechada
+# (uma varredura incompleta NÃO é "sem junctions"). Devolve @{ Ok; Pontos }: Ok=$false se não deu para varrer tudo.
 function B05LowIL-ReparsePoints([string]$raiz) {
-  $achados = [System.Collections.Generic.List[string]]::new()
-  try {
-    Get-ChildItem -LiteralPath $raiz -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
-      ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq [IO.FileAttributes]::ReparsePoint
-    } | ForEach-Object { $achados.Add($_.FullName) }
-  } catch { $achados.Add("ERRO-VARREDURA:$($_.Exception.Message)") }
-  return $achados.ToArray()
+  $pontos = [System.Collections.Generic.List[string]]::new(); $ok = $true
+  $pilha = [System.Collections.Generic.Stack[string]]::new(); $pilha.Push($raiz)
+  while ($pilha.Count) {
+    $d = $pilha.Pop()
+    try { $filhos = [System.IO.Directory]::GetFileSystemEntries($d) }
+    catch { $ok = $false; continue }   # não conseguiu enumerar este diretório → varredura incompleta
+    foreach ($f in $filhos) {
+      try { $attr = [System.IO.File]::GetAttributes($f) } catch { $ok = $false; continue }
+      if (($attr -band [IO.FileAttributes]::ReparsePoint) -eq [IO.FileAttributes]::ReparsePoint) { $pontos.Add($f) }   # não desce
+      elseif (($attr -band [IO.FileAttributes]::Directory) -eq [IO.FileAttributes]::Directory) { $pilha.Push($f) }
+    }
+  }
+  return @{ Ok = $ok; Pontos = $pontos.ToArray() }
 }
 
 # Bloco de ambiente UTF-16 terminado em NUL duplo, a partir de um hashtable (E84-03: ambiente higienizado).
