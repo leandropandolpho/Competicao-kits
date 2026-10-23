@@ -19,3 +19,4 @@ Regra: o projeto total só recua com regressão real de trabalho, registrada aqu
 | 090 | E84-03 implementada (NO_READ_UP + ambiente limpo) | 88% | 94% | bateria 82/82 (051); confidencialidade de credenciais resolvida (R-a) |
 | 091 | E84-04+E84-05 implementadas | 90% | 95% | bateria 86/86 (054); SO nega junction ao executor (N18c-1); varredura fecha reparse pré-existente (N18c-2); UI limits no job; falta só Claude real (N18a + e2e) |
 | 092 | causa-raiz do fluxo real corrigida (EstadoDir sem NR) | 92% | 96% | 7 achados corrigidos (token, $args, cmd/s, .git, env, UI, EstadoDir/settings); 070/073 provam Claude real OK em baixa integridade dentro e fora do job; 074 rodou, falta reler (ponte offline) |
+| 095 | F09/F10/F11 corrigidas (Ato 094) | 98% | 99% | bateria 89/89 (076) com N18f/g/h; regressão real 077 (e2e verde, isolação N18a mantida); delta pronto p/ ChatGPT |

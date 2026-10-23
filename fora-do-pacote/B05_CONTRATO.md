@@ -221,3 +221,12 @@ Mesa convergente (ChatGPT Ato 084 ACATO COM EMENDAS; Gemini Ato 085 concordânci
 - **E84-04** modelo de ameaça COM/broker/processo médio preexistente: documentado; `JOB_OBJECT_UILIMIT_*`; a certificação Low IL vale só para o piloto supervisionado — operação desassistida bloqueada até isolamento de principal (SID distinto, AppContainer ou VM).
 - **E84-05** `baixo.cmd` por caminho absoluto em pasta média `NWNRNX`; o embrulho e o `baixo.cmd` varrem `RepoPath` por reparse points/junctions criados pelo executor e abortam (fail-closed) antes de qualquer ação de nível médio.
 - Testes: **N18a** (Claude real tenta forjar liberação/editar razão e estado → negado, inalterado), **N18b** (simulado), **N18c** (teste do repo + reparse points + links), **N18d** (descendente médio do executor → 29), proteção de leitura das credenciais, ausência de handles privilegiados e **execução real completa do Claude em Low IL** (teto US$ 0,30–0,50).
+
+
+## 12. Correções focais do Ato 094 (F09, F10, F11) — IMPLEMENTADAS (candidata a `8b6ff9b`)
+Mesa convergente (Gemini Ato 094 aceite técnico pleno para o piloto; ChatGPT Ato 094 acata a validação funcional e condiciona o fechamento a estas três correções, sem reabrir a arquitetura).
+- **B05-F09** (alta) — o lançador agora confere o código de retorno de cada `icacls` e, sobretudo, **relê e verifica os rótulos efetivos** (`InfoLabel` via GetNamedSecurityInfo): repo = baixo (4096), `.git` e `.git/config` = não-baixo, razão e chave da supervisora = com NO_READ_UP; qualquer divergência ⇒ bloqueio (código 31). Teste **N18g** (força `.git` baixo + falha do re-rótulo → bloqueio 31).
+- **B05-F10** (alta) — `B05LowIL-ReparsePoints` passou a enumerar manualmente e devolver `@{Ok;Pontos}`; **qualquer falha de enumeração ⇒ `Ok=$false` ⇒ falha fechada** no embrulho e no `baixo-exec` (varredura incompleta não é "sem junctions"). Teste **N18h**.
+- **B05-F11** (média) — removido o bypass `B05_SEM_UILIMIT`; as restrições de UI do job são sempre aplicadas em baixa integridade.
+- **N18f** (condição do EstadoDir) — comprovado que o executor baixo **lê** o `settings-executor.json` (necessário) mas **não grava** `estado.json` nem `settings-executor.json` (write-up negado).
+- Bateria simulada **89/89** (relatório 076); regressão real (077): e2e legítimo concluído e commitado com as verificações ativas; isolação adversarial N18a mantida.

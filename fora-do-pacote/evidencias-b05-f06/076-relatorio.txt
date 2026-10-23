@@ -1,0 +1,128 @@
+=== INICIO 2026-10-23T14:47:55 | piloto
+commit: 8b6ff9b629d538164e945f94593a732bb400bc7a | controlador: CED2EC45BE2FF8405C57874BC29373F7E8AC6F20B696DEE512A3E562F3E6608E
+C84D41969DE097F9EA04D9C11C6E126651E22C89CFD2A735439EB6CCA525D0FA b05job.ps1
+F4B3A5E4A1354163BCB292A3D285612F7B7A1E51AF59DC7BBDE5CEB7B5D0BBCE baixa-integridade.ps1
+E29B488AB9A401E8A7AE8E39AF757674D577E70C2100525A98B7ADDB5F06017B baixo-exec.ps1
+DABC5031B2D05DCA261BB3593BA8099CEE17A2088663B9FDB23B56AA5B1BCDBF claude-com-teto.ps1
+FAD2199BD27BE9CA62616083D9EB6F3F80C095356D48845D3E10C5D450AE1F22 dispensa.ps1
+2C34D50CB297F9ACB7E3039539060D659ED47794DE5587F0A224289D66EC36DA lancador.ps1
+9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56 razao.ps1
+388D2AB66E8A5A0A5BEB6F6CCA8D0041C5001179248F2AE64521DDBE942C13D1 baixo.cmd
+98FABF981F5922AB745065B851AAABFB0902C173F9B4863D1C081A04192546FE claude-com-teto.cmd
+7397D9B804A0F958E6A685321634F9DA0B7A86762102F1EFB0A439E2CD0D7771 fake-executor.ps1
+51F47AABAEE60C8BF3487AD1DA8117E23DA0FF42F4BDC5F99C0B263271621005 testar-b05.ps1
+##### 1 — bateria simulada
+== N7 + N8: chamada normal pelo controlador congelado
+  [ok] controlador terminou (0) e T1 done
+  [ok] razão: inicio e fim com custo 0.30
+  [ok] N8: argumentos do controlador preservados + --max-budget-usd 0.5 no fim
+  [ok] N8: stdin (prompt da tarefa) chegou ao executor
+  [ok] N8: cwd do executor é o repo
+  [ok] E1: razão (conhecido) = estado.json do controlador
+  [ok] P1: executor registrado dentro de um Job Object (IsProcessInJob)
+== N8: código de saída e JSON de erro preservados
+  [ok] controlador viu código 3 do executor (falhou, T1 failed)
+  [ok] razão: fim com custo 0.02 do JSON de erro
+== N9: várias chamadas esgotam o orçamento (0.30 cada; reserva 0.625; orçamento 1.60)
+  [ok] T1–T4 done, T5 failed
+  [ok] 4 inicios, 1 bloqueado, executor chamado 4 vezes
+  [ok] sem dupla cobrança: razão 1.20 = estado.json 1.20
+== N3: saldo insuficiente antes de iniciar
+  [ok] código 23, controlador não iniciou, executor não chamado
+== N10: falha de associação ao job / handle herdável
+  [ok] associação falha → código 24, controlador não iniciou
+  [ok] handle herdável → código 24, controlador não iniciou
+== N4: processo antigo vivo (PID + criação) e PID reutilizado
+  [ok] processo antigo vivo → código 22
+  [ok] mesmo PID com outra criação (reutilizado) → não bloqueia
+== N5 + N1 + N2 + N6: segunda instância, queda do lançador, reserva e retomada (simulado)
+  [ok] N1: executor estava no job antes da queda
+  [ok] N5: segunda instância para o mesmo EstadoDir → código 20
+  [ok] N1: executor morto em ≤ 5 s (PID + criação)
+  [ok] N1: controlador morto
+  [ok] N1: varredura só verifica (nenhum evento de associação nem violação)
+  [ok] N1: tarefa ficou in_progress para a retomada
+  [ok] N2: chamada derrubada reservada (0.625), não zero
+  [ok] N6: retomada concluiu T1 (0)
+  [ok] N6: total = 0.625 (derrubada) + 0.30 (nova)
+  [ok] N6: um único commit da tarefa
+== E4: razão com linha parcial bloqueia
+  [ok] código 21, nada iniciado
+== N11: pwsh empacotado (Microsoft Store) ou hash diferente → 27
+  [ok] lançador no pwsh da Store → código 27, nada iniciado
+  [ok] hash do pwsh diferente do fixado → código 27, nada iniciado
+== N12: violação VERDADEIRA (executor → pwsh da Store → cmd → ping) → 29, externos mortos, próxima partida recusada
+  [ok] lançador saiu com 29 antes do fim natural do executor
+  [ok] contencao_violada durável com processo real fora do job
+  [ok] externos_encerramento gravado
+  [ok] conferência externa: nenhum ping da cadeia vivo
+  [ok] conferência externa: pwsh da Store da cadeia morto
+  [ok] conferência externa: executor morto
+  [ok] partida seguinte recusada (29) sem LIBERACAO_HUMANA, executor não chamado
+  [ok] com LIBERACAO_HUMANA (id da execução) → retoma e conclui T1
+== N13: dois EstadoDir com o mesmo RazaoDir em paralelo → 20
+  [ok] segunda execução recusada com 20
+  [ok] configuração da primeira intacta e somente-leitura
+== N14: estado.json divergente do razão → 28 antes de iniciar
+  [ok] primeira execução ok e reconciliada (estado 0.60 = base 0 + conhecido 0.60)
+  [ok] divergência → 28, executor não chamado
+== N15: falha forçada na gravação do pid → executor encerrado, reserva mantida, erro
+  [ok] chamada falhou rápido (executor encerrado, sem esperar 60 s)
+  [ok] sem evento pid nem fim; reserva 0.625 mantida
+  [ok] notas.txt intacto (executor não alterou nada)
+== N16: reutilização sequencial do razão por outro estado → 30, razão inalterado
+  [ok] outro estado com razão vinculado → 30
+  [ok] RazaoDir byte a byte inalterado
+  [ok] estado vinculado apontado para outro razão → 30, novo razão vazio
+== N17 + H8: custo histórico entra no orçamento e na reconciliação
+  [ok] base 2.60 + reserva 0.625 > 3 → código 23, executor não chamado
+  [ok] base_historica gravada uma vez com 2.60
+  [ok] segunda tentativa: ainda 23 e base não regravada
+  [ok] H8: base 0.30 + conhecido 0.30 = estado 0.60, T2 done
+== N18b/N18e (E84-02/E84-03): executor em BAIXA integridade tenta subverter E LER razão/credencial/.git → tudo negado; tarefa normal segue
+  [ok] N18b: executor registrado em baixa integridade (nivel_il 4096)
+  [ok] N18b/N18e: toda SUBVERSÃO/ESCRITA/leitura-de-segredo NEGADA (só settings_ler é OK)
+  [ok] N18e: credencial e razão não lidos; ambiente sem segredos (sem vars vazadas)
+  [ok] N18f: EstadoDir legível (settings) mas NÃO gravável pelo executor baixo
+  [ok] N18b: razão sem evento forjado e sem LIBERACAO_HUMANA
+  [ok] N18b: config-<execucao>.json preservado
+  [ok] N18b: .git intacto (sem hook plantado, sem [x] no config)
+  [ok] N18b: apesar dos ataques, T1 done e custo 0.30 contabilizado
+== N18c-1 (E84-05): executor em baixa integridade NÃO consegue criar junction p/ pasta média (o próprio SO nega)
+  [ok] N18c-1: mklink negado e junction NÃO criada na árvore
+  [ok] N18c-1: pasta média alvo intacta
+  [ok] N18c-1: executor foi baixa integridade (nivel_il 4096)
+== N18c-2 (E84-05): reparse point PRÉ-EXISTENTE na árvore → varredura do embrulho fecha a execução (defesa em profundidade)
+  [ok] N18c-2: reparse_detectado gravado, execução falhou, sem commit
+== N18g (B05-F09): .git acaba em baixa integridade e o re-rótulo médio falha → a verificação do lançador bloqueia (31)
+  [ok] N18g: lançador relê o rótulo, vê .git baixo e bloqueia com 31 (controlador não iniciou)
+== N18h (B05-F10): varredura de reparse points incompleta → falha fechada (não é 'sem junctions')
+  [ok] N18h: reparse_detectado com ok_varredura=false, execução falhou, sem commit
+== N19-R (E84-01): custo inválido rejeitado ANTES do controlador — sem commit, reserva mantida, trava financeira, parada determinística
+  [ok] negativo: executor invocado 1 vez (2ª tentativa travou antes de invocar)
+  [ok] negativo: fim desconhecido+invalido, reserva 0.625, conhecido 0
+  [ok] negativo: trava_financeira + evidencia_bruta gravadas
+  [ok] negativo: SEM commit (HEAD intacto, notas.txt = base)
+  [ok] negativo: T1 failed e estado reconciliado (estado = B + K, sem custo inválido)
+  [ok] texto: executor invocado 1 vez (2ª tentativa travou antes de invocar)
+  [ok] texto: fim desconhecido+invalido, reserva 0.625, conhecido 0
+  [ok] texto: trava_financeira + evidencia_bruta gravadas
+  [ok] texto: SEM commit (HEAD intacto, notas.txt = base)
+  [ok] texto: T1 failed e estado reconciliado (estado = B + K, sem custo inválido)
+  [ok] nao_finito: executor invocado 1 vez (2ª tentativa travou antes de invocar)
+  [ok] nao_finito: fim desconhecido+invalido, reserva 0.625, conhecido 0
+  [ok] nao_finito: trava_financeira + evidencia_bruta gravadas
+  [ok] nao_finito: SEM commit (HEAD intacto, notas.txt = base)
+  [ok] nao_finito: T1 failed e estado reconciliado (estado = B + K, sem custo inválido)
+== N20: processo não legítimo tenta enquadrar-se na exceção do conhost.exe
+  [ok] N20a: conhost.exe falso (caminho fora do System32) → não dispensado
+  [ok] N20b: conhost.exe verdadeiro criado após a associação → não dispensado
+  [ok] N20c (controle): conhost.exe verdadeiro, pai certo, criado antes → dispensável
+  [ok] N20d: pai diferente do lançador → não dispensado
+  [ok] N20e: criado antes do lançador (PID reutilizado) → não dispensado
+  [ok] N20f: processo com pai falsificado criado (teste válido)
+  [ok] N20f: não consta como pré-existente dispensado
+  [ok] N20f: tratado como qualquer descendente (contido pelo job e morto no fim, ou violação 29) — nunca sobrevive
+TOTAL B05: 89 / 89
+código: 0
+=== FIM 2026-10-23T14:55:11
