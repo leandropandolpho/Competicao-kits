@@ -1,0 +1,19 @@
+=== INICIO 2026-10-23T11:48:34
+--- CONTROLE: Claude baixo FORA de job
+FORA => em_job:True código:0 is_error:false result:OK
+FORA    out(80): {"duration_api_ms":1641,"stop_reason":"end_turn","session_id":"4bd507bf-45c3-4f5
+InvalidOperation: C:\Users\piloto\piloto\ponte\feitos\073-diag-job-lowil.ps1:41
+Line |
+  41 |      "$tag    err(300): " + (($e -replace '\s+',' ').Substring(0,[Math …
+     |      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Method invocation failed because [System.Object[]] does not contain a method named 'Substring'.
+
+--- TESTE: Claude baixo DENTRO de job (KILL_ON_JOB_CLOSE)
+DENTRO => em_job:True código:0 is_error:false result:OK
+DENTRO    out(80): {"duration_api_ms":1278,"stop_reason":"end_turn","session_id":"172e567c-2632-4e4
+InvalidOperation: C:\Users\piloto\piloto\ponte\feitos\073-diag-job-lowil.ps1:41
+Line |
+  41 |      "$tag    err(300): " + (($e -replace '\s+',' ').Substring(0,[Math …
+     |      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Method invocation failed because [System.Object[]] does not contain a method named 'Substring'.
+
