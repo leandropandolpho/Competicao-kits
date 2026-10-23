@@ -149,6 +149,7 @@ if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { Parar 24 "Se
 $fl = [B05Job]::Flags($job)
 if ($fl -lt 0) { Parar 24 'QueryInformationJobObject falhou' }
 if (-not ($fl -band [B05Job]::KILL_ON_JOB_CLOSE) -or ($fl -band [B05Job]::BREAKAWAY_OK) -or ($fl -band [B05Job]::SILENT_BREAKAWAY_OK)) { Parar 24 ("limites do job inesperados: 0x{0:X}" -f $fl) }
+if ($BaixaIntegridade) { if (-not [B05Job]::RestringirUI($job)) { Parar 24 "restrições de UI do job falharam ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" } }   # E84-04
 if ($TesteHandleHerdavel) { [B05Job]::SetHandleInformation($job, [B05Job]::HANDLE_FLAG_INHERIT, [B05Job]::HANDLE_FLAG_INHERIT) | Out-Null }
 $hf = [uint32]0
 if (-not [B05Job]::GetHandleInformation($job, [ref]$hf)) { Parar 24 'GetHandleInformation falhou' }
@@ -214,6 +215,14 @@ if ($BaixaIntegridade) {
 }
 $env:PATH = "$PwshDir;$env:PATH"   # E76-02: "pwsh" pedido por qualquer descendente resolve para o portátil
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+
+# E84-05/G3: em baixa integridade, o teste do repositório (que o executor pode ter alterado) roda via baixo.cmd —
+# em BAIXA integridade e com varredura de reparse points. O controlador congelado chama TestCmd por "pwsh -Command".
+if ($BaixaIntegridade) {
+  $baixoCmd = Join-Path $PSScriptRoot 'baixo.cmd'
+  if (-not (Test-Path -LiteralPath $baixoCmd)) { Parar 26 "baixo.cmd não encontrado em $PSScriptRoot" }
+  $TestCmd = "& '$baixoCmd' $TestCmd"
+}
 
 $psi = [System.Diagnostics.ProcessStartInfo]::new($PwshProprio)
 foreach ($a in @('-NoProfile', '-File', $ControladorPath, '-RepoPath', $RepoPath, '-TarefasPath', $TarefasPath, '-EstadoDir', $EstadoDir,

@@ -108,6 +108,19 @@ function B05LowIL-Cmdline([string]$exe, [string[]]$argumentos, [string]$inFile, 
   return "`"$env:ComSpec`" /s /c `"$interno`""
 }
 
+# E84-05: pontos de reparse (junctions, symlinks) sob $raiz. O executor baixo pode criar uma junction na árvore de
+# trabalho apontando para uma pasta média; se o controlador médio (git, teste) a atravessar, operaria com autoridade
+# média no alvo. Qualquer reparse encontrado ⇒ falha fechada antes de qualquer ação de nível médio.
+function B05LowIL-ReparsePoints([string]$raiz) {
+  $achados = [System.Collections.Generic.List[string]]::new()
+  try {
+    Get-ChildItem -LiteralPath $raiz -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
+      ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq [IO.FileAttributes]::ReparsePoint
+    } | ForEach-Object { $achados.Add($_.FullName) }
+  } catch { $achados.Add("ERRO-VARREDURA:$($_.Exception.Message)") }
+  return $achados.ToArray()
+}
+
 # Bloco de ambiente UTF-16 terminado em NUL duplo, a partir de um hashtable (E84-03: ambiente higienizado).
 function B05LowIL-BlocoAmbiente([hashtable]$vars) {
   $sb = [System.Text.StringBuilder]::new()

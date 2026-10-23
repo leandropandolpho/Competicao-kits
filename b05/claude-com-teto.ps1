@@ -141,6 +141,14 @@ if (-not $lowil) {
   $saida = [System.IO.File]::ReadAllText($outFile, $Utf8)
   $erro = if (Test-Path $errFile) { [System.IO.File]::ReadAllText($errFile, $Utf8) } else { '' }
   try { Remove-Item -Recurse -Force $cTmp -ErrorAction SilentlyContinue } catch { }
+  # E84-05: antes de devolver ao controlador (que fará git e teste em nível médio), varre a árvore de trabalho por
+  # reparse points/junctions que o executor baixo possa ter plantado para redirecionar uma escrita média. Qualquer um
+  # ⇒ falha fechada (reserva mantida; sem 'fim'; o controlador reverte sem commit).
+  $rep = @(B05LowIL-ReparsePoints (Get-Location).Path)
+  if ($rep.Count) {
+    try { Razao-Gravar $dir @{ evento = 'reparse_detectado'; id = $id; execucao = $execucao; pontos = @($rep) } } catch { }
+    Sair-Erro "reparse point/junction na árvore de trabalho ($($rep -join '; ')): execução abortada, reserva mantida" 6
+  }
 }
 $custo = $null
 $custoBruto = $null

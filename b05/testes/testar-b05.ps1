@@ -253,6 +253,18 @@ Checar 'N18b: config-<execucao>.json preservado' ($cfgRest.Count -eq 1)
 Checar 'N18b: .git intacto (sem hook plantado, sem [x] no config)' (-not (Test-Path "$($a.Repo)\.git\hooks\pre-commit") -and (Get-Content "$($a.Repo)\.git\config" -Raw) -notmatch '\[x\]')
 Checar 'N18b: apesar dos ataques, T1 done e custo 0.30 contabilizado' ($r.Codigo -eq 0 -and (Status $a) -eq 'T1=done' -and [math]::Abs((Razao-Contabilizar $ev 0.25).Conhecido - 0.30) -lt 1e-6) "código $($r.Codigo) $(Status $a)"
 
+"== N18c (E84-05): executor em baixa integridade planta junction na árvore p/ pasta média → falha fechada, sem commit"
+$a = Novo-Ambiente 1
+$alvo = "$($a.Base)\alvo-medio"; New-Item -ItemType Directory -Force $alvo | Out-Null; Set-Content "$alvo\sentinela.txt" 'intacto'
+$env:B05FAKE_ALVO = $alvo
+$base0 = git -C $a.Repo rev-parse HEAD
+$r = Rodar-Lancador $a 3 'junction' @('-BaixaIntegridade')
+Remove-Item Env:B05FAKE_ALVO
+$ev = Eventos $a
+Checar 'N18c: reparse_detectado gravado e execução falhou (sem commit)' (@($ev | Where-Object evento -eq 'reparse_detectado').Count -ge 1 -and $r.Codigo -ne 0 -and (git -C $a.Repo rev-parse HEAD) -eq $base0) "código $($r.Codigo) head $((git -C $a.Repo rev-parse HEAD))"
+Checar 'N18c: pasta média alvo intacta (sentinela não sobrescrita)' ((Get-Content "$alvo\sentinela.txt" -Raw).Trim() -eq 'intacto' -and @(Get-ChildItem $alvo -File).Count -eq 1) "conteúdo alvo alterado"
+Checar 'N18c: executor foi baixa integridade (nivel_il 4096)' ([int](@($ev | Where-Object evento -eq 'pid')[0].nivel_il) -eq 4096)
+
 "== N19-R (E84-01): custo inválido rejeitado ANTES do controlador — sem commit, reserva mantida, trava financeira, parada determinística"
 foreach ($caso in @(@('negativo', '{"type":"result","is_error":false,"result":"x","total_cost_usd":-5}'),
                     @('texto', '{"type":"result","is_error":false,"result":"x","total_cost_usd":"0.3"}'),
