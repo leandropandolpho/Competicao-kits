@@ -105,15 +105,18 @@ if (-not $lowil) {
     Sair-Erro "token de baixa integridade não criado: $msgTok"
   }
   $cmdline = B05LowIL-Cmdline $exe $argExec $inFile $outFile $errFile
-  # E84-03: ambiente HIGIENIZADO (lista branca). Sem B05_* (o executor nem sabe onde fica o razão), sem segredos da
-  # supervisora/OpenAI; TEMP e a config do Claude em pastas BAIXAS.
-  $manter = 'SystemRoot','windir','SystemDrive','ComSpec','PATH','PATHEXT','OS','NUMBER_OF_PROCESSORS','PROCESSOR_ARCHITECTURE','PROCESSOR_IDENTIFIER','PROCESSOR_LEVEL','PROCESSOR_REVISION','USERPROFILE','USERNAME','USERDOMAIN','HOMEDRIVE','HOMEPATH','COMPUTERNAME','PUBLIC','PROGRAMDATA','PROGRAMFILES','PROGRAMFILES(X86)','COMMONPROGRAMFILES','LOCALAPPDATA','APPDATA','SESSIONNAME','LANG'
+  # E84-03: ambiente HIGIENIZADO por LISTA DE BLOQUEIO (lista branca estrita matava o Claude — achado 056). Parte do
+  # ambiente completo (o Claude real precisa dele) e REMOVE: variáveis internas B05_* (o executor não sabe onde fica o
+  # razão), segredos da supervisora/OpenAI/Anthropic e quaisquer *_KEY/_TOKEN/_SECRET. TEMP e a config do Claude ⇒ baixos.
   $vars = @{}
-  foreach ($k in $manter) { $v = [Environment]::GetEnvironmentVariable($k); if ($null -ne $v) { $vars[$k] = $v } }
+  foreach ($e in [Environment]::GetEnvironmentVariables().GetEnumerator()) {
+    $n = [string]$e.Key
+    if ($n -like 'B05_*' -or $n -match '(?i)openai|anthropic|supervisora|supabase|_KEY$|_TOKEN$|_SECRET$|APIKEY|ACCESS_KEY') { continue }
+    $vars[$n] = [string]$e.Value
+  }
   foreach ($e in Get-ChildItem Env:B05FAKE_* -ErrorAction SilentlyContinue) { $vars[$e.Name] = $e.Value }   # só testes
   $vars['TEMP'] = $cTmp; $vars['TMP'] = $cTmp
   if ($env:B05_BAIXO_CLAUDE) { $vars['CLAUDE_CONFIG_DIR'] = $env:B05_BAIXO_CLAUDE }
-  $vars.Remove('ANTHROPIC_API_KEY') | Out-Null
   $blocoEnv = B05LowIL-BlocoAmbiente $vars
   $lpid = 0; $hProc = [IntPtr]::Zero
   try { $msgLan = [B05LowIL]::Lancar($tok, $cmdline, (Get-Location).Path, $blocoEnv, [ref]$lpid, [ref]$hProc) }
