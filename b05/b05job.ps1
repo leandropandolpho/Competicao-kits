@@ -32,9 +32,12 @@ public static class B05Job {
   public static bool Configurar(IntPtr job, uint flags) { EXT i = new EXT(); i.Basic.LimitFlags = flags; return SetInformationJobObject(job, 9, ref i, (uint)Marshal.SizeOf(typeof(EXT))); }
   // E84-04: restrições de UI do Job (classe 4 = JobObjectBasicUIRestrictions). 0xFF = todas:
   // HANDLES|READCLIPBOARD|WRITECLIPBOARD|SYSTEMPARAMETERS|DISPLAYSETTINGS|GLOBALATOMS|DESKTOP|EXITWINDOWS.
-  // Barra ataques de UI (shatter/clipboard) a partir do executor. Processos de console (controlador, claude) não usam UI.
+  // Barra ataques de UI (shatter/clipboard/atoms) a partir do executor. Subconjunto SEGURO: HANDLES (0x1, impede usar
+  // handles de USER de processos fora do job — o anti-shatter), READCLIPBOARD (0x2), WRITECLIPBOARD (0x4) e
+  // GLOBALATOMS (0x20). NÃO inclui DESKTOP/EXITWINDOWS/SYSTEMPARAMETERS/DISPLAYSETTINGS: 0xFF impedia o Claude (node)
+  // de iniciar no job (achado 057/058 — sem job funcionava, com 0xFF não).
   [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int cls, ref uint info, uint len);
-  public static bool RestringirUI(IntPtr job) { uint r = 0xFF; return SetInformationJobObject(job, 4, ref r, 4); }
+  public static bool RestringirUI(IntPtr job) { uint r = 0x1 | 0x2 | 0x4 | 0x20; return SetInformationJobObject(job, 4, ref r, 4); }
   public static long Flags(IntPtr job) { EXT i = new EXT(); if (!QueryInformationJobObject(job, 9, ref i, (uint)Marshal.SizeOf(typeof(EXT)), IntPtr.Zero)) return -1; return i.Basic.LimitFlags; }
   public static uint[] Membros(IntPtr job) {
     int cap = 512; int size = 8 + cap * IntPtr.Size; IntPtr buf = Marshal.AllocHGlobal(size);
