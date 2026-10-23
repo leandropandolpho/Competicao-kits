@@ -29,8 +29,9 @@ switch ($tipo) {
     # N18c: planta uma junction na árvore de trabalho (baixa) apontando para uma pasta MÉDIA, para desviar uma escrita
     # média que a atravesse. A varredura de reparse points do embrulho deve fechar a execução.
     $link = Join-Path (Get-Location) 'linkmedio'
-    & cmd /c mklink /J "$link" "$env:B05FAKE_ALVO" 2>&1 | Out-Null
-    Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'plantou junction'; total_cost_usd = 0.30 } | ConvertTo-Json -Compress; exit 0 }
+    $mk = (& cmd /c mklink /J "$link" "$env:B05FAKE_ALVO" 2>&1) -join ' '
+    Set-Content (Join-Path (Get-Location) 'juncao.txt') ("mklink=$mk | criado=" + (Test-Path $link))
+    Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'tentou junction'; total_cost_usd = 0.30 } | ConvertTo-Json -Compress; exit 0 }
   'atacar'   {
     # N18b/N18e: executor (em baixa integridade) tenta subverter E LER registros/credenciais de nível médio.
     # Alvos vêm por B05FAKE_* (o ambiente higienizado da E84-03 removeu B05_DIR). Resultado em .\ataque.txt (repo baixo).
