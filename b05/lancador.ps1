@@ -201,9 +201,11 @@ if ($BaixaIntegridade) {
   # A raiz ganhou um rótulo BAIXO herdável; .git não tinha rótulo próprio e passaria a HERDAR baixo (achado N18b/049).
   # Rótulo MÉDIO explícito em .git e em toda a sua subárvore sobrepõe a herança: o executor baixo não escreve lá.
   if (Test-Path -LiteralPath (Join-Path $RepoPath '.git')) { & icacls (Join-Path $RepoPath '.git') /setintegritylevel '(OI)(CI)medium' /T /Q 2>&1 | Out-Null }
-  # E84-03: NO_READ_UP nas pastas sensíveis — o executor baixo não LÊ razão, estado nem a chave da supervisora.
+  # E84-03: NO_READ_UP nas pastas com SEGREDOS/registros — o executor baixo não LÊ a chave da supervisora nem o razão.
+  # NÃO no EstadoDir: o controlador grava ali o settings-executor.json que o Claude PRECISA ler (achado 072/073); o
+  # estado.json é dado de custo (não credencial) e já está protegido contra escrita pelo nível de integridade.
   . (Join-Path $PSScriptRoot 'baixa-integridade.ps1')
-  foreach ($p in @($RazaoDir, $EstadoCan, (Join-Path $env:USERPROFILE '.supervisora'))) {
+  foreach ($p in @($RazaoDir, (Join-Path $env:USERPROFILE '.supervisora'))) {
     if (Test-Path -LiteralPath $p) { $mr = [B05LowIL]::RotularNRNW($p); if ($mr) { Parar 26 "falha ao proteger '$p' (NO_READ_UP): $mr" } }
   }
   # E84-03: cópia da config do Claude em nível BAIXO (o executor real precisa escrever sessão/cache; não toca em ~/.claude).
