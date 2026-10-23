@@ -149,7 +149,7 @@ if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { Parar 24 "Se
 $fl = [B05Job]::Flags($job)
 if ($fl -lt 0) { Parar 24 'QueryInformationJobObject falhou' }
 if (-not ($fl -band [B05Job]::KILL_ON_JOB_CLOSE) -or ($fl -band [B05Job]::BREAKAWAY_OK) -or ($fl -band [B05Job]::SILENT_BREAKAWAY_OK)) { Parar 24 ("limites do job inesperados: 0x{0:X}" -f $fl) }
-if ($BaixaIntegridade) { if (-not [B05Job]::RestringirUI($job)) { Parar 24 "restrições de UI do job falharam ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" } }   # E84-04
+if ($BaixaIntegridade -and -not $env:B05_SEM_UILIMIT) { if (-not [B05Job]::RestringirUI($job)) { Parar 24 "restrições de UI do job falharam ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" } }   # E84-04 (B05_SEM_UILIMIT: diagnóstico)
 if ($TesteHandleHerdavel) { [B05Job]::SetHandleInformation($job, [B05Job]::HANDLE_FLAG_INHERIT, [B05Job]::HANDLE_FLAG_INHERIT) | Out-Null }
 $hf = [uint32]0
 if (-not [B05Job]::GetHandleInformation($job, [ref]$hf)) { Parar 24 'GetHandleInformation falhou' }
