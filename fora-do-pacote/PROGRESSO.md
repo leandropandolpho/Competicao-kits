@@ -17,3 +17,4 @@ Regra: o projeto total só recua com regressão real de trabalho, registrada aqu
 | 088 | sonda Low IL decisiva VERDE | 84% | 92% | Claude real completa tarefa em baixa integridade (041 inconclusiva por bug $pid + falta de --settings; 042 corrigida: arquivo editado, is_error=false) |
 | 089 | E84-01+E84-02+G2 implementadas | 86% | 93% | bateria 81/81 (050): N18b nega 5 subversões do executor em baixa integridade (razão, liberação, config, hook e config do .git), tarefa normal completa e comita; achados corrigidos: máscara do token (ADJUST_DEFAULT), $args automático, cmd /s, .git médio explícito |
 | 090 | E84-03 implementada (NO_READ_UP + ambiente limpo) | 88% | 94% | bateria 82/82 (051); confidencialidade de credenciais resolvida (R-a) |
+| 091 | E84-04+E84-05 implementadas | 90% | 95% | bateria 86/86 (054); SO nega junction ao executor (N18c-1); varredura fecha reparse pré-existente (N18c-2); UI limits no job; falta só Claude real (N18a + e2e) |

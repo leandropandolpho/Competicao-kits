@@ -1,0 +1,7 @@
+=== INICIO 2026-10-23T10:30:37
+token: ok
+mklink saída: 1
+mk.txt: Acesso negado. 
+link existe? False | é reparse? 0
+ReparsePoints detectou: 0 → 
+=== FIM 2026-10-23T10:30:46
