@@ -31,15 +31,15 @@ Spec: `b05/pe/PONTE-PU-SPEC.md` (v2 + emendas 141-144 + emendas do Ato 148, seç
 | b05/razao.ps1 | 9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56 |
 | b05/pe/acao-pe.ps1 | 5159B36084B82782AA9BF0E141A99FC7D10BB82628E4D3852628675FB9031A62 |
 | b05/pe/ponte-pu.ps1 | FC262DC947F4DDC3D55C2FE569F5AAF421F55C24C27BDBD0EFFBA2D8EF41B6A4 |
-| b05/pe/claude-ponte.ps1 | E66377243DA196649E77C35D843CD0442CF0267F5B7FB680C3D858CC635F22C3 |
+| b05/pe/claude-ponte.ps1 | F24F617612A4CA1DFAEAA419683A02636401EDB300D3B01539581D08365C4D53 |
 | b05/pe/claude-ponte.cmd | B7B2E7F445C7AD02CECB02553D13722C19A8DB248708F34AFC58EB8D1D6E33B8 |
-| b05/pe/despachante-teste.ps1 | 2261B1118CCEE3326F6D04B0F61BA9FA07A85B03D5CDCD105744E1062F58FC0A |
+| b05/pe/despachante-teste.ps1 | B3E12D25A103AD403A1C0C311C1DD137DFDCF66CBBFC029732B976988F217363 |
 | b05/pe/despachante-teste.cmd | BEDC456E4D73C2BA9CDBEFE9B2691D0CD1B8032CA972A69ACA2BE460B52178B1 |
 | b05/testes/fake-executor.ps1 | 3EE1DB213CCEEB54A7274F64DF5BB797B8AF9920BA9558422723CDA76964F3B8 |
 | b05/pe/testes/testar-pe.ps1 | 49D9E2B7383185AA06895C6532B8A4D7BE1DEFA3F8F5B30AE3981FBCDE85AB62 |
 | b05/pe/testes/testar-ponte-pu.ps1 | 07CCB11FCEF9A19E03DEFB15A4B16C1F64AEC9B3139B7BD75459094E7D8D6EBA |
 | b05/pe/testes/testar-integra-ponte.ps1 | BE1034A8BE4274B4ED30E157807C1826F6BEDB41C8BA49A534DC1DCC930A390C |
-| b05/pe/testes/testar-controlador-real-ponte.ps1 | C73E0D9590043E1F617D48151E959C057F158598F5393C30BD28750D9225A02F |
+| b05/pe/testes/testar-controlador-real-ponte.ps1 | 34ED6E7D13E5D3BCEE0E446EEBD27FB5CF0D828AACADA3150AEA42CDB2CE1377 |
 
 ## 3. Matriz de testes (bateria REAL no notebook, conta piloto, pwsh 7.6.7)
 
@@ -57,7 +57,7 @@ acesso perigoso ao supervisor NEGADOS; supervisor vivo)**.
 PU-09 (ponte externa; diffs vazios), M-C1 (sucesso→commit+custo), M-CUSTO (custo inválido→28→rollback+trava),
 M-ORFAO (pré-flight encerra órfão vivo). Casos renomeados (M-) para não colidir com os nomes do harness do oráculo.
 
-### 3.4 Integração — CONTROLADOR REAL 7cd7864 (`testar-controlador-real-ponte.ps1`) — 10/10
+### 3.4 Integração — CONTROLADOR REAL 7cd7864 (`testar-controlador-real-ponte.ps1`) — 13/13
 ClaudeCmd=claude-ponte.cmd, TestCmd=despachante-teste.cmd, executor=fake. Seleção EXTERNA (parâmetros), sem tocar
 controlador/lancador (fecha V1-F01).
 | Caso | REQ | Prova |
@@ -66,9 +66,17 @@ controlador/lancador (fecha V1-F01).
 | I-D2 | REQ-04/S-03/V1-F02 | o $TestCmd roda via ponte sob o PE em Low IL (nível 4096), NÃO como PU; escrita Low em .git NEGADA |
 | I-TMO | REQ-10 | executor trava via ponte → ponte encerra → controlador rollback (HEAD=base, árvore limpa) |
 | I-RET | REQ-12/C6 | retomada preserva o custo do razão (não zera) + pré-flight encerra o órfão vivo anterior |
+| I-SHA | cópia confiável | config com hashes_nucleo divergente → despachante **97** (SHA do núcleo divergente) → teste recusado, sem commit |
+| I-FLAG | hardening | claude-ponte recusa flag perigosa (--dangerously-*/bypass) sem despachar — lista fechada de flags |
 
-### 3.5 Congelamento consolidado (job 113, uma execução, SHAs congelados) — 102/102, EXITCODE 0
-PE 40/40 + PU 39/39 + INTEGRA (mínimo) 13/13 + CTRL-REAL 10/10 = **102/102**. Evidência: b05/pe/evidencias/113-congelamento-candidata2-102-102.txt.
+**Reconciliação com a Perplexity (Ato 147/148):** convergência INDEPENDENTE na solução de D-2 (despachante P-B, modo
+teste no acao-pe, correção do prompt/stdin). Esta candidata é a minha base JÁ EXECUTADA no Windows, com os dois reforços
+de segurança da proposta dela incorporados: (a) lista fechada de flags no claude-ponte (I-FLAG) + REQ-12(1); (b) SHA-256
+do núcleo conferido no despachante antes do dot-source, código 97 (I-SHA). Pendente de decisão da mesa: o lançador-ponte
+externo com pré-flight R-01 ANTES do controlador (a Perplexity propõe para a V1; a spec coloca R-01 na V2 — fronteira).
+
+### 3.5 Congelamento consolidado (job 115, uma execução, SHAs congelados) — 105/105, EXITCODE 0
+PE 40/40 + PU 39/39 + INTEGRA (mínimo) 13/13 + CTRL-REAL 13/13 = **105/105**. Evidência: b05/pe/evidencias/115-congelamento-reconciliado-105-105.txt.
 Residual honesto (C6): a morte ABRUPTA do controlador no timing exato não é injetada deterministicamente; o mecanismo de
 defesa (pré-flight anti-órfão + custo preservado na retomada) é que está provado (I-RET, M-ORFAO). Declarado, não presumido.
 
@@ -95,7 +103,7 @@ por subárvore com disparo local.
 ## 6. Decisão técnica (apta/não-apta)
 Trilha B COMPLETA: PE 40/40, PU 39/39, integração (mínimo) e CONTROLADOR REAL 10/10 — com cada negativo comprovando a
 tentativa (comando/PID/IL/erro do Windows). As três objeções do Ato 147 (D-1 condição, D-2 material, D-3 condições) foram
-endereçadas com prova. Resta à mesa: reverificar esta candidata e confirmar 4/4. ABERTO por design (V2): REQ-09/PE-F11 e
+endereçadas com prova, e os dois reforços de segurança da Perplexity (I-SHA, I-FLAG) incorporados e provados. Resta à mesa: reverificar esta candidata reconciliada e confirmar 4/4. ABERTO por design (V2): REQ-09/PE-F11 e
 a contenção entre dois principais Windows.
 
 ## 7. Registro formal de mudanças de teste por commit (exigência do despacho / Perplexity)

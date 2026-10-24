@@ -1,0 +1,29 @@
+== JOB 114 - CONTROLADOR REAL em modo ponte ==
+quando: 2026-10-24 19:34:23  git=True
+SHA controlador: CED2EC45BE2FF8405C57874BC29373F7E8AC6F20B696DEE512A3E562F3E6608E
+SHA claude-ponte: F24F617612A4CA1DFAEAA419683A02636401EDB300D3B01539581D08365C4D53
+SHA despachante-teste: B3E12D25A103AD403A1C0C311C1DD137DFDCF66CBBFC029732B976988F217363
+== bateria ==
+== I-C1 (REQ-08): controlador REAL -> ponte -> executor edita + teste passa -> commit (done)
+[ok] I-C1: controlador saiu 0 (done)
+[ok] I-C1: commit efetivado (HEAD avancou)
+[ok] I-C1: executor editou a arvore via ponte (notas.txt)
+[ok] I-C1: razao reconciliado com custo > 0
+== I-D2 (fecha V1-F02): o TestCmd roda via ponte sob o PE em Low IL; escrita Low em .git (Medium) NEGADA (nao e PU)
+[ok] I-D2: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU
+[ok] I-D2: escrita Low em .git (Medium) pela via do TESTE -> NEGADA
+== I-TMO (REQ-10): executor trava via ponte -> ponte encerra -> controlador rollback (sem commit)
+[ok] I-TMO: controlador NAO comitou (HEAD=base)
+[ok] I-TMO: arvore limpa apos rollback
+== I-RET (REQ-12): retomada preserva o custo do razao (nao zera) e pre-flight encerra orfao vivo anterior
+[ok] I-RET: custo preservado na retomada (nao zerou; acumulou)
+[ok] I-RET: pre-flight encerrou o orfao vivo antes de despachar
+== I-SHA (cópia confiável do PU, convergência Perplexity): config com hashes_nucleo divergente -> despachante 97 -> sem commit
+[ok] I-SHA: SHA divergente do nucleo -> teste recusado, controlador NAO comitou (HEAD=base)
+== I-FLAG (hardening de flags, convergência Perplexity): claude-ponte recusa flag perigosa sem disparar
+[ok] I-FLAG: claude-ponte recusou a flag perigosa (error_ponte/flag nao permitida)
+[ok] I-FLAG: nao despachou (nenhuma pasta-ponte criada)
+
+TOTAL INTEGRA-CTRL: 13 / 13
+
+== EXITCODE: 0 ==

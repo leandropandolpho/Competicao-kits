@@ -30,9 +30,29 @@ if ("$($cfg.execucao)" -ne $execucao) { Sair-Erro 'config nao corresponde a exec
 # `-p --output-format` com um prompt). Assim o wrapper serve tanto ao controlador real quanto a chamadas com -p literal.
 $prompt = ''
 if ([Console]::IsInputRedirected) { try { $prompt = [Console]::In.ReadToEnd() } catch { $prompt = '' } }
+$lista = @($args | ForEach-Object { [string]$_ })
 if (-not $prompt) {
-  $lista = @($args | ForEach-Object { [string]$_ })
   for ($i = 0; $i -lt $lista.Count; $i++) { if ($lista[$i] -eq '-p' -and ($i + 1) -lt $lista.Count -and $lista[$i + 1] -notlike '-*') { $prompt = $lista[$i + 1]; break } }
+}
+
+# Hardening por LISTA FECHADA de flags (convergencia com a proposta da Perplexity, Ato 148): o modo ponte so aceita as
+# flags do contrato do controlador congelado. Qualquer outra flag (ex.: --dangerously-*, bypassPermissions) e RECUSADA
+# sem disparo. --output-format so 'json'; --permission-mode so {dontAsk,default,plan,acceptEdits}; --settings so FORA da
+# arvore de trabalho. Protege contra controlador/mutante que injete flag perigosa pela via do executor.
+$trabAbs = (Get-Location).Path
+for ($i = 0; $i -lt $lista.Count; $i++) {
+  $tok = $lista[$i]
+  if ($tok -eq '-p') { continue }
+  elseif ($tok -eq '--output-format') { if ($lista[$i+1] -ne 'json') { Sair-Erro "flag nao permitida: --output-format $($lista[$i+1])" 1 }; $i++ }
+  elseif ($tok -eq '--permission-mode') { if ($lista[$i+1] -notin @('dontAsk','default','plan','acceptEdits')) { Sair-Erro "permission-mode nao permitido: $($lista[$i+1])" 1 }; $i++ }
+  elseif ($tok -eq '--settings') { $s="$($lista[$i+1])"; if (-not $s -or $s.StartsWith($trabAbs,[System.StringComparison]::OrdinalIgnoreCase)) { Sair-Erro '--settings deve ficar fora da arvore de trabalho' 1 }; $i++ }
+  elseif ($tok -like '-*') { Sair-Erro "flag nao permitida no modo ponte: $tok" 1 }
+}
+
+# REQ-12(1): o prazo da ponte deve caber no TimeoutSec do controlador (quando a config o informa), com margem.
+$timeout = if ($cfg.PSObject.Properties['timeout_ponte_seg'] -and $cfg.timeout_ponte_seg) { [int]$cfg.timeout_ponte_seg } else { 120 }
+if ($cfg.PSObject.Properties['timeout_controlador_seg'] -and $cfg.timeout_controlador_seg) {
+  if ($timeout -ge [int]$cfg.timeout_controlador_seg) { Sair-Erro "REQ-12(1): prazo da ponte ($timeout) >= TimeoutSec do controlador ($($cfg.timeout_controlador_seg))" 1 }
 }
 
 # Nucleo do PU, carregado de FORA da arvore de trabalho (I2): mesma pasta deste wrapper (b05/pe), protegida por ACL/IL
@@ -40,7 +60,6 @@ if (-not $prompt) {
 . (Join-Path $PSScriptRoot 'ponte-pu.ps1')
 
 $teto = [double]$cfg.teto_chamada_usd; $folga = [double]$cfg.folga; $orc = [double]$cfg.orcamento_usd
-$timeout = if ($cfg.PSObject.Properties['timeout_ponte_seg'] -and $cfg.timeout_ponte_seg) { [int]$cfg.timeout_ponte_seg } else { 120 }
 $pedido = @{ executor = "$($cfg.executor)"; executor_prefixo = "$($cfg.executor_prefixo)"; test_cmd = ''; teto_usd = $teto }
 
 $res = Invoke-PontePU-V1 -PonteDir "$($cfg.ponte_dir)" -TrabDir (Get-Location).Path -AcaoPs1 "$($cfg.acao_pe)" `

@@ -17,6 +17,22 @@ if ("$($cfg.execucao)" -ne $execucao) { [Console]::Error.Write('despachante-test
 $testeReal = "$($cfg.test_cmd_real)"
 if (-not $testeReal) { [Console]::Error.Write('despachante-teste: config sem test_cmd_real'); exit 1 }
 
+# Copia confiavel do PU (convergencia com a Perplexity, Ato 148): confere o SHA-256 do NUCLEO ANTES do dot-source. Se a
+# config traz hashes_nucleo, qualquer divergencia => exit 97 (SHA divergente), sem carregar/disparar nada. O fonte no
+# GitHub nao substitui a protecao em runtime; este check garante que o PU nao carregue um nucleo adulterado.
+if ($cfg.PSObject.Properties['hashes_nucleo'] -and $cfg.hashes_nucleo) {
+  $raizPe = $PSScriptRoot
+  $mapa = @{ 'ponte-pu.ps1' = (Join-Path $raizPe 'ponte-pu.ps1'); 'acao-pe.ps1' = (Join-Path $raizPe 'acao-pe.ps1')
+    'b05job.ps1' = (Join-Path $raizPe '..\b05job.ps1'); 'baixa-integridade.ps1' = (Join-Path $raizPe '..\baixa-integridade.ps1')
+    'razao.ps1' = (Join-Path $raizPe '..\razao.ps1') }
+  foreach ($k in $cfg.hashes_nucleo.PSObject.Properties.Name) {
+    $esperado = "$($cfg.hashes_nucleo.$k)".ToUpper().Replace(':', '')
+    $p = $mapa[$k]
+    if (-not $p -or -not (Test-Path -LiteralPath $p)) { [Console]::Error.Write("despachante: arquivo do nucleo ausente: $k"); exit 97 }
+    $real = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToUpper()
+    if ($real -ne $esperado) { [Console]::Error.Write("despachante: SHA-256 do nucleo divergente ($k): $real != $esperado"); exit 97 }
+  }
+}
 # Nucleo do PU, de fora da arvore de trabalho (I2), protegido por ACL/IL e SHA no provisionamento.
 . (Join-Path $PSScriptRoot 'ponte-pu.ps1')
 

@@ -1,0 +1,187 @@
+== JOB 115 - CONGELAMENTO V1 candidata 2 (reconf) (correcoes Ato 147) ==
+quando: 2026-10-24 19:38:01  git=True
+
+== SHA-256 (artefatos) ==
+  C84D41969DE097F9EA04D9C11C6E126651E22C89CFD2A735439EB6CCA525D0FA  b05\b05job.ps1
+  8115F3ACF8386DA166147F33C460F935ECCD3A393F52E0B5AE1B5C88A43FFB27  b05\baixa-integridade.ps1
+  9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56  b05\razao.ps1
+  5159B36084B82782AA9BF0E141A99FC7D10BB82628E4D3852628675FB9031A62  b05\pe\acao-pe.ps1
+  FC262DC947F4DDC3D55C2FE569F5AAF421F55C24C27BDBD0EFFBA2D8EF41B6A4  b05\pe\ponte-pu.ps1
+  F24F617612A4CA1DFAEAA419683A02636401EDB300D3B01539581D08365C4D53  b05\pe\claude-ponte.ps1
+  B7B2E7F445C7AD02CECB02553D13722C19A8DB248708F34AFC58EB8D1D6E33B8  b05\pe\claude-ponte.cmd
+  B3E12D25A103AD403A1C0C311C1DD137DFDCF66CBBFC029732B976988F217363  b05\pe\despachante-teste.ps1
+  BEDC456E4D73C2BA9CDBEFE9B2691D0CD1B8032CA972A69ACA2BE460B52178B1  b05\pe\despachante-teste.cmd
+  3EE1DB213CCEEB54A7274F64DF5BB797B8AF9920BA9558422723CDA76964F3B8  b05\testes\fake-executor.ps1
+  49D9E2B7383185AA06895C6532B8A4D7BE1DEFA3F8F5B30AE3981FBCDE85AB62  b05\pe\testes\testar-pe.ps1
+  07CCB11FCEF9A19E03DEFB15A4B16C1F64AEC9B3139B7BD75459094E7D8D6EBA  b05\pe\testes\testar-ponte-pu.ps1
+  BE1034A8BE4274B4ED30E157807C1826F6BEDB41C8BA49A534DC1DCC930A390C  b05\pe\testes\testar-integra-ponte.ps1
+  34ED6E7D13E5D3BCEE0E446EEBD27FB5CF0D828AACADA3150AEA42CDB2CE1377  b05\pe\testes\testar-controlador-real-ponte.ps1
+
+== BATERIA PE ==
+== PE-S1: execucao normal (ok:0.30) -> stdout.json/exit.code/fim.flag, em_job verdadeiro, sem razao
+[ok] PE-S1: acao-pe saiu 0
+[ok] PE-S1: stdout.json existe
+[ok] PE-S1: exit.code existe
+[ok] PE-S1: fim.flag existe
+[ok] PE-S1: stdout tem result do executor
+[ok] PE-S1: custo 0.30 preservado na saida bruta
+[ok] PE-S1: em_job verdadeiro (contido pelo Job herdado)
+[ok] PE-S1: PE nao gravou razao nem TAREFAS (nenhum fora da pasta-ponte)
+== PE-S2:  roda sob o PE DEPOIS do executor (teste.txt com codigo)
+[ok] PE-S2: teste.txt existe
+[ok] PE-S2: teste rodou sob o PE e saiu 0
+== PE-S3: ADM-V5-02 - pwsh com SHA errado -> falha fechada (nao roda)
+[ok] PE-S3: SHA divergente bloqueia (codigo != 0, sem fim.flag)
+== PE-S4: timeout mata o job (dorme > timeout) -> acao-pe falha, sem fim.flag
+[ok] PE-S4: timeout bloqueia (codigo != 0, sem fim.flag)
+== PE-S5 (PE-F05): falha vira estado terminal (falhou.flag) e NAO e reselecionada
+[ok] PE-S5: falhou.flag gravado (terminal)
+[ok] PE-S5: sem fim.flag
+[ok] PE-S5: 2a passada nao reprocessa a falha (nenhuma pendente)
+== PE-S6 (PE-F09): TestCmd com exit!=0 vira estado terminal (falhou.flag, sem fim.flag)
+[ok] PE-S6: TestCmd reprovado -> falhou.flag, sem fim.flag
+[ok] PE-S6: teste.txt registrado (codigo=1) como evidencia
+== PE-R1 (real): executor em Low IL -> nivel_il 4096, em_job, fim.flag
+[ok] PE-R1: acao-pe saiu 0
+[ok] PE-R1: fim.flag existe
+[ok] PE-R1: executor em nivel 4096 (Low IL real)
+[ok] PE-R1: em_job verdadeiro
+== PE-R2 (real, PE-F01): timeout real -> EsperarSinal detecta, falhou.flag, SEM fim.flag (acao-pe sobrevive)
+[ok] PE-R2: timeout real -> falhou.flag (terminal)
+[ok] PE-R2: sem fim.flag
+== PE-R3 (real, PE-F02): $TestCmd roda sob o PE em Low IL (nivel 4096)
+[ok] PE-R3: teste.txt com nivel=4096 (teste em Low IL)
+== PE-R4a (real): sem orfao apos encerramento NORMAL (neto no job morre com KILL_ON_JOB_CLOSE)
+[ok] PE-R4a: acao-pe saiu 0 e fim.flag existe
+[ok] PE-R4a: neto (PID+criacao) NAO sobrevive ao encerramento normal
+== PE-R4b (real): sem orfao apos TIMEOUT (TerminateJobObject mata toda a arvore)
+[ok] PE-R4b: timeout -> falhou.flag, sem fim.flag
+[ok] PE-R4b: neto NAO sobrevive ao timeout
+== PE-R4c (real): sem orfao apos FALHA do executor (exit!=0), codigo preservado
+[ok] PE-R4c: exit.code preserva 7 e fim.flag existe
+[ok] PE-R4c: neto NAO sobrevive a falha do executor
+== PE-S7 (PE-F10): rastreamento indisponivel bloqueia (fail-closed); executor NAO roda
+[ok] PE-S7: falhou.flag, sem fim.flag
+[ok] PE-S7: executor bloqueado antes de executar (sem stdout.json)
+== PE-S8 (PE-F07): falha de associacao ao Job bloqueia ANTES de executar (suspenso encerrado)
+[ok] PE-S8: falhou.flag, sem fim.flag
+[ok] PE-S8: executor nao resumido (sem stdout.json)
+== PE-L (PE-F08): -Laco encerra o Job por execucao (neto da 1a morre antes da 2a; acao-pe segue vivo)
+[ok] PE-L: 1a execucao concluiu (fim.flag) sob -Laco
+[ok] PE-L: acao-pe -Laco ainda vivo apos a 1a execucao
+[ok] PE-L: neto da 1a morto pelo teardown do Job (nao so na saida do processo)
+[ok] PE-L: 2a execucao concluiu na MESMA instancia -Laco
+== PE-S9 (P-03): limites do Job — KILL_ON_JOB_CLOSE ligado; BREAKAWAY desligado
+[ok] PE-S9: KILL_ON_JOB_CLOSE ligado
+[ok] PE-S9: BREAKAWAY_OK/SILENT_BREAKAWAY_OK desligados
+
+TOTAL PE: 40 / 40
+== EXITCODE PE: 0 ==
+
+== BATERIA PU ==
+== PU-01: fluxo feliz (executor ok) -> codigo 0, stdout, subarvore morta, sem trava, razao reconciliado (REQ-02)
+[ok] PU-01: codigo 0 e Ok
+[ok] PU-01: stdout com result do executor
+[ok] PU-01: sem violacao e sem trava
+[ok] PU-01: razao com reserva (inicio teto=0.5)
+[ok] PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)
+== PU-02 (REQ-02): executor reporta total_cost_usd INVALIDO (texto) -> custo desconhecido -> 28 + trava financeira
+[ok] PU-02: custo invalido -> codigo 28, violacao
+[ok] PU-02: trava FINANCEIRA gravada
+[ok] PU-02: razao fim custo_desconhecido (nao vira zero, D-06 c)
+[ok] PU-02: evidencia bruta preservada fora do repo
+[ok] PU-02b: 2a chamada barrada pela trava FINANCEIRA com codigo 28 (preserva a classe)
+== PU-13 (N-01): executor Low tenta escrever .git/hooks e .git/config -> NEGADO (.git Medium)
+[ok] PU-13: executor rodou e gravou ataque.txt
+[ok] PU-13: git_hook NEGADO (.git Medium barra Low)
+[ok] PU-13: git_config NEGADO
+== PU-03 (N-02): pasta exec_id pre-existente -> recusa (70), nao despacha
+[ok] PU-03: recusou exec_id pre-existente (codigo 70, violacao)
+[ok] PU-03: nao reutilizou/apagou (residuo fim.flag intacto)
+== PU-07 (reparse): junction na arvore, embrulho NAO varre -> varredura do PU pos-morte -> 70
+[ok] PU-07: reparse detectado -> codigo 70, violacao
+[ok] PU-07: evidencia preservada fora do repo
+[ok] PU-07: trava de seguranca gravada
+== PU-04 (sobrevivente): acao nao-contida deixa neto vivo -> REQ-03 do PU detecta -> 70 + evidencia + trava
+[ok] PU-04: sobrevivente -> codigo 70, violacao
+[ok] PU-04: evidencia preservada
+== PU-10: apos a violacao (PU-04), a 2a chamada e BARRADA pela trava (sem despachar)
+[ok] PU-10: 2a chamada barrada pela trava (codigo 70, motivo=trava)
+== PU-08 (N-06): acao que trava -> timeout do PU, subarvore morta, sem fim.flag -> 28 (financeiro), sem retry
+[ok] PU-08: timeout do PU -> codigo 28 (financeiro), violacao
+[ok] PU-08: trava FINANCEIRA gravada
+== PU-05 (REQ-06/D-06 d): executor OK (custo conhecido) mas teste REPROVA -> falhou.flag por execucao, custo conhecido, retry com exec_id novo
+[ok] PU-05: teste reprovado -> codigo 1 (falha comum, nao violacao)
+[ok] PU-05: classificado D-06(d) falha de teste
+[ok] PU-05: teste.txt registrou reprovacao (codigo=3)
+[ok] PU-05: razao fim custo CONHECIDO (executor rodou, 0.20; nao desconhecido)
+[ok] PU-05: 2a tentativa (exec_id novo) NAO barrada -> executa (codigo 0)
+== PU-12 (REQ-04/S-03): o codigo do TESTE roda em Low IL e NAO escreve em alvo Medium (.git) -> NEGADO (fronteira de IL)
+[ok] PU-12: fluxo OK (teste tratou o erro e saiu 0) -> codigo 0
+[ok] PU-12: teste rodou em Low IL (nivel=4096)
+[ok] PU-12: escrita Low em .git (Medium) NEGADA (fronteira de IL)
+[ok] PU-12: teste.txt NAO forjavel pelo codigo Low (gravado pelo PE em Medium)
+== PU-14 (D-2): fase SOMENTE-TESTE via ponte -> teste roda sob o PE em Low IL (Job novo), escrita Low em .git NEGADA
+[ok] PU-14: fase somente-teste concluiu (codigo 0, fim.flag)
+[ok] PU-14: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU
+[ok] PU-14: escrita Low em .git (Medium) pela via do TESTE -> NEGADA (fecha V1-F02)
+== PU-15 (REQ-04 completo): teste Low NAO escreve em alvo Medium e NAO faz acesso perigoso ao processo supervisor
+[ok] PU-15: teste em Low IL (nivel=4096)
+[ok] PU-15: escrita Low em alvo MEDIO (ex. teste.txt/pasta-ponte) -> NEGADA
+[ok] PU-15: acesso perigoso ao processo supervisor (Medium) -> NEGADO
+[ok] PU-15: supervisor permaneceu vivo (nao foi encerrado pelo teste Low)
+
+TOTAL PU: 39 / 39
+== EXITCODE PU: 0 ==
+
+== BATERIA INTEGRA ==
+== PU-09 (REQ-08): a ponte e EXTERNA ao controlador e ao claude-com-teto (nao os referencia) ==
+[ok] PU-09: claude-ponte (codigo) NAO carrega/invoca controlador.ps1
+[ok] PU-09: claude-ponte (codigo) NAO carrega/invoca claude-com-teto
+  (diff git verificado no container - arvore isolada do notebook nao tem o repo do projeto)
+== M-C1 (REQ-08, controlador MINIMO): fluxo feliz pela ponte -> executor edita a arvore, custo reconciliado, commit
+warning: in the working copy of 'codigo.txt', LF will be replaced by CRLF the next time Git touches it
+[ok] M-C1: claude-ponte saiu 0
+[ok] M-C1: controlador comitou (HEAD avancou)
+[ok] M-C1: executor editou a arvore (notas.txt commitado)
+[ok] M-C1: razao reconciliado (fim custo_usd=0.20 conhecido)
+== M-CUSTO (REQ-02/C-02/C-03, controlador MINIMO): custo invalido pela ponte -> erro 28 -> rollback (HEAD=base, arvore limpa), trava financeira
+warning: in the working copy of 'codigo.txt', LF will be replaced by CRLF the next time Git touches it
+[ok] M-CUSTO: claude-ponte devolveu 28 (financeiro)
+[ok] M-CUSTO: NAO comitou; HEAD=base (rollback)
+[ok] M-CUSTO: arvore limpa apos rollback (C-03)
+[ok] M-CUSTO: trava FINANCEIRA gravada (C-02)
+== M-ORFAO (REQ-12/R-01 V1, controlador MINIMO): PE orfao VIVO de execucao anterior -> pre-flight da ponte encerra ANTES de despachar
+warning: in the working copy of 'codigo.txt', LF will be replaced by CRLF the next time Git touches it
+[ok] M-ORFAO: orfao estava VIVO antes da chamada
+[ok] M-ORFAO: pre-flight encerrou o orfao (morto depois)
+[ok] M-ORFAO: chamada subsequente prosseguiu (claude-ponte 0)
+
+TOTAL INTEGRA: 13 / 13
+== EXITCODE INTEGRA: 0 ==
+
+== BATERIA CTRL-REAL ==
+== I-C1 (REQ-08): controlador REAL -> ponte -> executor edita + teste passa -> commit (done)
+[ok] I-C1: controlador saiu 0 (done)
+[ok] I-C1: commit efetivado (HEAD avancou)
+[ok] I-C1: executor editou a arvore via ponte (notas.txt)
+[ok] I-C1: razao reconciliado com custo > 0
+== I-D2 (fecha V1-F02): o TestCmd roda via ponte sob o PE em Low IL; escrita Low em .git (Medium) NEGADA (nao e PU)
+[ok] I-D2: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU
+[ok] I-D2: escrita Low em .git (Medium) pela via do TESTE -> NEGADA
+== I-TMO (REQ-10): executor trava via ponte -> ponte encerra -> controlador rollback (sem commit)
+[ok] I-TMO: controlador NAO comitou (HEAD=base)
+[ok] I-TMO: arvore limpa apos rollback
+== I-RET (REQ-12): retomada preserva o custo do razao (nao zera) e pre-flight encerra orfao vivo anterior
+[ok] I-RET: custo preservado na retomada (nao zerou; acumulou)
+[ok] I-RET: pre-flight encerrou o orfao vivo antes de despachar
+== I-SHA (cópia confiável do PU, convergência Perplexity): config com hashes_nucleo divergente -> despachante 97 -> sem commit
+[ok] I-SHA: SHA divergente do nucleo -> teste recusado, controlador NAO comitou (HEAD=base)
+== I-FLAG (hardening de flags, convergência Perplexity): claude-ponte recusa flag perigosa sem disparar
+[ok] I-FLAG: claude-ponte recusou a flag perigosa (error_ponte/flag nao permitida)
+[ok] I-FLAG: nao despachou (nenhuma pasta-ponte criada)
+
+TOTAL INTEGRA-CTRL: 13 / 13
+== EXITCODE CTRL-REAL: 0 ==
+
+== CONGELAMENTO4: PE=0 PU=0 INTEGRA=0 CTRL-REAL=0 -> 0 ==

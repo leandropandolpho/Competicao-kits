@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $raiz = $PSScriptRoot
 $pontecmd = (Resolve-Path (Join-Path $raiz '..\claude-ponte.cmd')).Path
+$pontePs1 = (Resolve-Path (Join-Path $raiz '..\claude-ponte.ps1')).Path
 $despcmd  = (Resolve-Path (Join-Path $raiz '..\despachante-teste.cmd')).Path
 $acao     = (Resolve-Path (Join-Path $raiz '..\acao-pe.ps1')).Path
 $fake     = (Resolve-Path (Join-Path $raiz '..\..\testes\fake-executor.ps1')).Path
@@ -107,6 +108,26 @@ $orfMorto = (PU-Subarvore-Morta $orfPid $orfCri).Morta
 try { if (-not $orf.HasExited) { $orf.Kill($true) } } catch {}
 Checar 'I-RET: custo preservado na retomada (nao zerou; acumulou)' ((Custo $a1) -ge $custoAntes -and $custoAntes -gt 0) "antes=$custoAntes depois=$(Custo $a1)"
 Checar 'I-RET: pre-flight encerrou o orfao vivo antes de despachar' ($orfMorto)
+
+"== I-SHA (cópia confiável do PU, convergência Perplexity): config com hashes_nucleo divergente -> despachante 97 -> sem commit"
+$a5 = Novo-Ambiente 'exit 0'
+$cfgPath = Join-Path $a5.Ctrl "config-$($a5.Exec).json"
+$cfgObj = Get-Content $cfgPath -Raw | ConvertFrom-Json
+$cfgObj | Add-Member -NotePropertyName hashes_nucleo -NotePropertyValue ([pscustomobject]@{ 'acao-pe.ps1'='0000000000000000000000000000000000000000000000000000000000000000' }) -Force
+[IO.File]::WriteAllText($cfgPath, ($cfgObj | ConvertTo-Json -Depth 8), $Utf8)
+$r5 = Rodar-Ctrl $a5 'ok:0.20'
+Checar 'I-SHA: SHA divergente do nucleo -> teste recusado, controlador NAO comitou (HEAD=base)' ($r5.HeadAgora -eq $r5.HeadBase) "cod=$($r5.Codigo)"
+
+"== I-FLAG (hardening de flags, convergência Perplexity): claude-ponte recusa flag perigosa sem disparar"
+$a6 = Novo-Ambiente 'exit 0'
+$psi6 = [System.Diagnostics.ProcessStartInfo]::new($Pw)
+foreach ($a in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$pontePs1,'-p','--output-format','json','--dangerously-skip-permissions')) { $psi6.ArgumentList.Add($a) }
+$psi6.UseShellExecute=$false; $psi6.RedirectStandardOutput=$true; $psi6.RedirectStandardError=$true; $psi6.WorkingDirectory=$a6.Repo
+$psi6.Environment['B05_DIR']=$a6.Ctrl; $psi6.Environment['B05_EXECUCAO']=$a6.Exec; $psi6.Environment['B05_PWSH']=$Pw
+$p6=[System.Diagnostics.Process]::Start($psi6); $o6=$p6.StandardOutput.ReadToEnd(); $e6=$p6.StandardError.ReadToEnd(); $p6.WaitForExit()
+$pp6 = Get-ChildItem -Directory $a6.Ponte -EA SilentlyContinue | Measure-Object
+Checar 'I-FLAG: claude-ponte recusou a flag perigosa (error_ponte/flag nao permitida)' (("$o6$e6") -match 'flag nao permitida|error_ponte') "o=$o6 e=$e6"
+Checar 'I-FLAG: nao despachou (nenhuma pasta-ponte criada)' ($pp6.Count -eq 0)
 
 "`nTOTAL INTEGRA-CTRL: $ok / $tot"
 exit ([int]($ok -ne $tot))
