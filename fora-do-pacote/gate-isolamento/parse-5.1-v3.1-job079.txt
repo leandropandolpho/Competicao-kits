@@ -1,0 +1,12 @@
+=== INICIO 2026-10-24T11:27:09 | piloto
+fatal: ambiguous argument 'origin/main': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+origin/main: origin/main
+--- roteiro-admin-exec-piloto-v3.1.ps1  SHA256=9093DD20990F45A57D22882C840BFA7BE1F01D9E7B6E51B3C765457CAD8B4739  nao-ASCII=0
+  Desktop 5.1.26100.9711 erros=0
+  Core 7.6.7 erros=0
+--- desfazer-exec-piloto.ps1  SHA256=11B4B1B70619BBE769A3A98FAB9A4928D603E35E20025E4FB7DD741666E4BC90  nao-ASCII=0
+  Desktop 5.1.26100.9711 erros=0
+  Core 7.6.7 erros=0
+=== FIM 2026-10-24T11:27:19
