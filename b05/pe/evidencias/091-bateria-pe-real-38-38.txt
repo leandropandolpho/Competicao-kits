@@ -1,0 +1,71 @@
+== JOB 091 - bateria PE ampliada (com PE-F07..F10) (gate-pe @ a428f95, arvore isolada) ==
+quando: 2026-10-24 14:11:30
+pwsh: C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe (existe=True)
+
+== SHA-256 dos arquivos sob teste (conferir com origin/gate-pe) ==
+  C84D41969DE097F9EA04D9C11C6E126651E22C89CFD2A735439EB6CCA525D0FA  b05\b05job.ps1
+  8115F3ACF8386DA166147F33C460F935ECCD3A393F52E0B5AE1B5C88A43FFB27  b05\baixa-integridade.ps1
+  D36DE3142A3117785B686546639FCE354AA1900C79AD1D8F0C4B82B8804E0C3B  b05\pe\acao-pe.ps1
+  5F09227CFC09A500598FBC81D87F723C91814A4638B1D775FBDF3863FAB301D9  b05\pe\testes\testar-pe.ps1
+  9104DB05B77DEA1007D86397C41E8500384AEFC7FE2E54998EA52C763EA073C5  b05\testes\fake-executor.ps1
+
+testar-pe: C:\Users\piloto\piloto\gate-pe-083\b05\pe\testes\testar-pe.ps1 (existe=True)
+
+== bateria (pwsh 7.6.7) ==
+== PE-S1: execucao normal (ok:0.30) -> stdout.json/exit.code/fim.flag, em_job verdadeiro, sem razao
+[ok] PE-S1: acao-pe saiu 0
+[ok] PE-S1: stdout.json existe
+[ok] PE-S1: exit.code existe
+[ok] PE-S1: fim.flag existe
+[ok] PE-S1: stdout tem result do executor
+[ok] PE-S1: custo 0.30 preservado na saida bruta
+[ok] PE-S1: em_job verdadeiro (contido pelo Job herdado)
+[ok] PE-S1: PE nao gravou razao nem TAREFAS (nenhum fora da pasta-ponte)
+== PE-S2:  roda sob o PE DEPOIS do executor (teste.txt com codigo)
+[ok] PE-S2: teste.txt existe
+[ok] PE-S2: teste rodou sob o PE e saiu 0
+== PE-S3: ADM-V5-02 - pwsh com SHA errado -> falha fechada (nao roda)
+[ok] PE-S3: SHA divergente bloqueia (codigo != 0, sem fim.flag)
+== PE-S4: timeout mata o job (dorme > timeout) -> acao-pe falha, sem fim.flag
+[ok] PE-S4: timeout bloqueia (codigo != 0, sem fim.flag)
+== PE-S5 (PE-F05): falha vira estado terminal (falhou.flag) e NAO e reselecionada
+[ok] PE-S5: falhou.flag gravado (terminal)
+[ok] PE-S5: sem fim.flag
+[ok] PE-S5: 2a passada nao reprocessa a falha (nenhuma pendente)
+== PE-S6 (PE-F09): TestCmd com exit!=0 vira estado terminal (falhou.flag, sem fim.flag)
+[ok] PE-S6: TestCmd reprovado -> falhou.flag, sem fim.flag
+[ok] PE-S6: teste.txt registrado (codigo=1) como evidencia
+== PE-R1 (real): executor em Low IL -> nivel_il 4096, em_job, fim.flag
+[ok] PE-R1: acao-pe saiu 0
+[ok] PE-R1: fim.flag existe
+[ok] PE-R1: executor em nivel 4096 (Low IL real)
+[ok] PE-R1: em_job verdadeiro
+== PE-R2 (real, PE-F01): timeout real -> EsperarSinal detecta, falhou.flag, SEM fim.flag (acao-pe sobrevive)
+[ok] PE-R2: timeout real -> falhou.flag (terminal)
+[ok] PE-R2: sem fim.flag
+== PE-R3 (real, PE-F02): $TestCmd roda sob o PE em Low IL (nivel 4096)
+[ok] PE-R3: teste.txt com nivel=4096 (teste em Low IL)
+== PE-R4a (real): sem orfao apos encerramento NORMAL (neto no job morre com KILL_ON_JOB_CLOSE)
+[ok] PE-R4a: acao-pe saiu 0 e fim.flag existe
+[ok] PE-R4a: neto (PID+criacao) NAO sobrevive ao encerramento normal
+== PE-R4b (real): sem orfao apos TIMEOUT (TerminateJobObject mata toda a arvore)
+[ok] PE-R4b: timeout -> falhou.flag, sem fim.flag
+[ok] PE-R4b: neto NAO sobrevive ao timeout
+== PE-R4c (real): sem orfao apos FALHA do executor (exit!=0), codigo preservado
+[ok] PE-R4c: exit.code preserva 7 e fim.flag existe
+[ok] PE-R4c: neto NAO sobrevive a falha do executor
+== PE-S7 (PE-F10): rastreamento indisponivel bloqueia (fail-closed); executor NAO roda
+[ok] PE-S7: falhou.flag, sem fim.flag
+[ok] PE-S7: executor bloqueado antes de executar (sem stdout.json)
+== PE-S8 (PE-F07): falha de associacao ao Job bloqueia ANTES de executar (suspenso encerrado)
+[ok] PE-S8: falhou.flag, sem fim.flag
+[ok] PE-S8: executor nao resumido (sem stdout.json)
+== PE-L (PE-F08): -Laco encerra o Job por execucao (neto da 1a morre antes da 2a; acao-pe segue vivo)
+[ok] PE-L: 1a execucao concluiu (fim.flag) sob -Laco
+[ok] PE-L: acao-pe -Laco ainda vivo apos a 1a execucao
+[ok] PE-L: neto da 1a morto pelo teardown do Job (nao so na saida do processo)
+[ok] PE-L: 2a execucao concluiu na MESMA instancia -Laco
+
+TOTAL PE: 38 / 38
+
+== EXITCODE bateria: 0 ==
