@@ -96,6 +96,8 @@ gatilho R1 concomitante, o estado final pode ser HOLD (exit 2) em vez de failed 
 Trilha B (bateria real no notebook, conta piloto, pwsh 7.6.7) — COMPLETA:
 - PE 40/40 (job 098); PU 31/31 (job 101); Integracao 13/13 (job 103). Todos os negativos comprovam a tentativa
   (comando/PID/IL/erro efetivo do Windows), nao apenas verde.
+- CONGELAMENTO consolidado (job 104, uma unica execucao com os SHAs congelados): PE 40/40 + PU 31/31 + INTEGRA 13/13
+  = 84/84, EXITCODE 0. Evidencia: b05/pe/evidencias/104-congelamento-84-84.txt.
 Cobertura por requisito: REQ-01 (PU-03), REQ-02/D-06 (PU-01/02 + C1/C4), REQ-03 (PU-04), REQ-04/S-03 (PU-12),
 REQ-06/D-06(d) (PU-05), REQ-07 (PU-07), REQ-08 (PU-09/C1/C4/C6), REQ-10/N-06 (PU-08), REQ-11 (PU-10/PU-04/PU-07),
 REQ-12/R-01(V1) (C6). N-01 (PU-13), N-02 (PU-03), N-03/N-05 (nucleo), N-04 (evidencia), N-07 (trava), N-08 (lease/pre-flight).
