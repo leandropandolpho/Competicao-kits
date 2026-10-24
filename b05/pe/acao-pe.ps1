@@ -119,7 +119,11 @@ function Processar([string]$dir) {
   $job = [B05Job]::CreateJobObject([IntPtr]::Zero, $null)
   if ($job -eq [IntPtr]::Zero) { throw 'Job Object nao criado' }
   if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { throw 'Configurar(KILL_ON_JOB_CLOSE) falhou' }
-  [void][B05Job]::RestringirUI($job)
+  if (-not [B05Job]::RestringirUI($job)) { throw 'PE-F12: RestringirUI (restricoes de UI do Job) falhou — falha fechada' }   # PE-F12: sem UI restrita, nao executa nada
+  # PE-F08/P-03: o Job tem SO KILL_ON_JOB_CLOSE (sem BREAKAWAY_OK/SILENT_BREAKAWAY_OK) — filho nao escapa do Job.
+  $flags = [B05Job]::Flags($job)
+  if (($flags -band [B05Job]::KILL_ON_JOB_CLOSE) -eq 0) { throw "P-03: Job sem KILL_ON_JOB_CLOSE (flags=$flags)" }
+  if (($flags -band ([B05Job]::BREAKAWAY_OK -bor [B05Job]::SILENT_BREAKAWAY_OK)) -ne 0) { throw "P-03: Job permite breakaway (flags=$flags) — recusado" }
 
   try {
   $cTmp = Join-Path ($env:TEMP) ('pe-' + $execId.Substring(0,12)); New-Item -ItemType Directory -Force $cTmp | Out-Null

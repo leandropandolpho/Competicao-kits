@@ -187,6 +187,15 @@ if ($IsWindows) {
   Checar 'PE-L: 2a execucao concluiu na MESMA instancia -Laco' (Test-Path (Join-Path $d2 'fim.flag'))
   try { Stop-Process -Id $lacoProc.Id -Force -EA SilentlyContinue } catch {}
   Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+
+  "== PE-S9 (P-03): limites do Job — KILL_ON_JOB_CLOSE ligado; BREAKAWAY desligado"
+  . (Join-Path $raiz '..\..\b05job.ps1')   # [B05Job] no processo de teste
+  $jt = [B05Job]::CreateJobObject([IntPtr]::Zero, $null)
+  [void][B05Job]::Configurar($jt, [B05Job]::KILL_ON_JOB_CLOSE)
+  $fl = [B05Job]::Flags($jt)
+  Checar 'PE-S9: KILL_ON_JOB_CLOSE ligado' (($fl -band [B05Job]::KILL_ON_JOB_CLOSE) -ne 0) "flags=$fl"
+  Checar 'PE-S9: BREAKAWAY_OK/SILENT_BREAKAWAY_OK desligados' (($fl -band ([B05Job]::BREAKAWAY_OK -bor [B05Job]::SILENT_BREAKAWAY_OK)) -eq 0) "flags=$fl"
+  [void][B05Job]::TerminateJobObject($jt, 0); [void][B05Job]::CloseHandle($jt)
 }
 
 "`nTOTAL PE: $ok / $tot"
