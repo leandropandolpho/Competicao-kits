@@ -75,9 +75,11 @@ function Rodar-LowIL([IntPtr]$job,[string]$exe,[string[]]$argz,[string]$cwd,[has
   if ($sinal -ne 0) { [void][B05Job]::TerminateJobObject($job, 29); [B05LowIL]::Fechar($hProc); throw "timeout/espera (sinal 0x$($sinal.ToString('X'))) apos ${timeoutSeg}s: job encerrado" }
   $cod = [int][B05LowIL]::Esperar($hProc, 0)   # ja sinalizado: codigo real (nao 259)
   [B05LowIL]::Fechar($hProc)
-  @{ Codigo=$cod; Nivel=$nivel; EmJob=$emJob; Pid=$lpid; Criacao=$cri;
-     Saida=(if (Test-Path $outF) { [System.IO.File]::ReadAllText($outF,$Utf8) } else { '' });
-     Erro=(if (Test-Path $errF) { [System.IO.File]::ReadAllText($errF,$Utf8) } else { '' }) }
+  # PE-R1: ler para variaveis ANTES do hashtable. Em @{...} um valor (if...) e lido como pipeline (comando 'if'
+  # inexistente) e quebra em runtime (o parser aceita, mas falha ao executar). if-de-atribuicao e valido.
+  $saidaTxt = if (Test-Path $outF) { [System.IO.File]::ReadAllText($outF, $Utf8) } else { '' }
+  $erroTxt  = if (Test-Path $errF) { [System.IO.File]::ReadAllText($errF, $Utf8) } else { '' }
+  @{ Codigo=$cod; Nivel=$nivel; EmJob=$emJob; Pid=$lpid; Criacao=$cri; Saida=$saidaTxt; Erro=$erroTxt }
 }
 
 function Processar([string]$dir) {
