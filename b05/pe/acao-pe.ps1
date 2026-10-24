@@ -30,6 +30,14 @@ function Grava([string]$dir,[string]$nome,[string]$txt) {   # escrita atomica co
   [System.IO.File]::Move($tmp, (Join-Path $dir $nome), $true)
 }
 function Json($o) { $o | ConvertTo-Json -Compress -Depth 6 }
+# PE-R4: ler a E/S redirecionada TOLERANDO um descendente que ainda segura o handle herdado (cmd/ping neto do executor
+# mantem out.txt aberto ate ser ceifado pelo KILL_ON_JOB_CLOSE). FileShare.ReadWrite evita "being used by another process".
+function LerCompart([string]$caminho) {
+  if (-not (Test-Path -LiteralPath $caminho)) { return '' }
+  $fs = [System.IO.FileStream]::new($caminho, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+  try { $sr = [System.IO.StreamReader]::new($fs, $Utf8); try { return $sr.ReadToEnd() } finally { $sr.Dispose() } }
+  finally { $fs.Dispose() }
+}
 
 # PE-F06 / ADM-V5-02: executor/pwsh APROVADO, acessivel, com hash OBRIGATORIO conferido. Sem isso, falha fechada.
 function Conferir-Pwsh([string]$caminho,[string]$shaEsperado) {
@@ -77,8 +85,8 @@ function Rodar-LowIL([IntPtr]$job,[string]$exe,[string[]]$argz,[string]$cwd,[has
   [B05LowIL]::Fechar($hProc)
   # PE-R1: ler para variaveis ANTES do hashtable. Em @{...} um valor (if...) e lido como pipeline (comando 'if'
   # inexistente) e quebra em runtime (o parser aceita, mas falha ao executar). if-de-atribuicao e valido.
-  $saidaTxt = if (Test-Path $outF) { [System.IO.File]::ReadAllText($outF, $Utf8) } else { '' }
-  $erroTxt  = if (Test-Path $errF) { [System.IO.File]::ReadAllText($errF, $Utf8) } else { '' }
+  $saidaTxt = LerCompart $outF
+  $erroTxt  = LerCompart $errF
   @{ Codigo=$cod; Nivel=$nivel; EmJob=$emJob; Pid=$lpid; Criacao=$cri; Saida=$saidaTxt; Erro=$erroTxt }
 }
 
