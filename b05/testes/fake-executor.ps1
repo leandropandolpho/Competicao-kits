@@ -69,5 +69,9 @@ switch ($tipo) {
     )
     Set-Content $o ($linhas -join "`n")
     Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'tarefa feita'; total_cost_usd = 0.30 } | ConvertTo-Json -Compress; exit 0 }
+  'custo'    {
+    # REQ-02 (PU-02): emite total_cost_usd CRU a partir de B05FAKE_CUSTO (ex.: "caro" (texto), -3 (negativo),
+    # 1e999 (nao-finito)). O lado PU deve classificar como custo DESCONHECIDO -> trava financeira 28.
+    Alterar; [Console]::Out.Write('{"type":"result","is_error":false,"result":"feito","total_cost_usd":' + "$env:B05FAKE_CUSTO" + '}'); exit 0 }
   default    { Write-Output "modo desconhecido: $modo"; exit 9 }
 }

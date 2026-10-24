@@ -1,0 +1,110 @@
+== JOB 098 - bateria PE (40/40) + bateria PU (REQ-02), arvore isolada ==
+quando: 2026-10-24 17:16:00  pwsh=True
+
+== SHA-256 dos arquivos sob teste ==
+  C84D41969DE097F9EA04D9C11C6E126651E22C89CFD2A735439EB6CCA525D0FA  b05\b05job.ps1
+  8115F3ACF8386DA166147F33C460F935ECCD3A393F52E0B5AE1B5C88A43FFB27  b05\baixa-integridade.ps1
+  9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56  b05\razao.ps1
+  0A1B570FC11426159B7F9B4857613CE843D7776D2DA55BD605A5685B950FC4A7  b05\pe\acao-pe.ps1
+  CEF8A13F3A587A240584C98AB8DC807956F76FE13BF292D37ADF81CB5A958A46  b05\pe\ponte-pu.ps1
+  49D9E2B7383185AA06895C6532B8A4D7BE1DEFA3F8F5B30AE3981FBCDE85AB62  b05\pe\testes\testar-pe.ps1
+  F17B5169E55C872841CE72E4314D711D7D84134CBC81923C0231635DD1F491E0  b05\pe\testes\testar-ponte-pu.ps1
+  3EE1DB213CCEEB54A7274F64DF5BB797B8AF9920BA9558422723CDA76964F3B8  b05\testes\fake-executor.ps1
+
+== BATERIA PE (testar-pe.ps1) - re-validacao 40/40 com invocou.flag ==
+== PE-S1: execucao normal (ok:0.30) -> stdout.json/exit.code/fim.flag, em_job verdadeiro, sem razao
+[ok] PE-S1: acao-pe saiu 0
+[ok] PE-S1: stdout.json existe
+[ok] PE-S1: exit.code existe
+[ok] PE-S1: fim.flag existe
+[ok] PE-S1: stdout tem result do executor
+[ok] PE-S1: custo 0.30 preservado na saida bruta
+[ok] PE-S1: em_job verdadeiro (contido pelo Job herdado)
+[ok] PE-S1: PE nao gravou razao nem TAREFAS (nenhum fora da pasta-ponte)
+== PE-S2:  roda sob o PE DEPOIS do executor (teste.txt com codigo)
+[ok] PE-S2: teste.txt existe
+[ok] PE-S2: teste rodou sob o PE e saiu 0
+== PE-S3: ADM-V5-02 - pwsh com SHA errado -> falha fechada (nao roda)
+[ok] PE-S3: SHA divergente bloqueia (codigo != 0, sem fim.flag)
+== PE-S4: timeout mata o job (dorme > timeout) -> acao-pe falha, sem fim.flag
+[ok] PE-S4: timeout bloqueia (codigo != 0, sem fim.flag)
+== PE-S5 (PE-F05): falha vira estado terminal (falhou.flag) e NAO e reselecionada
+[ok] PE-S5: falhou.flag gravado (terminal)
+[ok] PE-S5: sem fim.flag
+[ok] PE-S5: 2a passada nao reprocessa a falha (nenhuma pendente)
+== PE-S6 (PE-F09): TestCmd com exit!=0 vira estado terminal (falhou.flag, sem fim.flag)
+[ok] PE-S6: TestCmd reprovado -> falhou.flag, sem fim.flag
+[ok] PE-S6: teste.txt registrado (codigo=1) como evidencia
+== PE-R1 (real): executor em Low IL -> nivel_il 4096, em_job, fim.flag
+[ok] PE-R1: acao-pe saiu 0
+[ok] PE-R1: fim.flag existe
+[ok] PE-R1: executor em nivel 4096 (Low IL real)
+[ok] PE-R1: em_job verdadeiro
+== PE-R2 (real, PE-F01): timeout real -> EsperarSinal detecta, falhou.flag, SEM fim.flag (acao-pe sobrevive)
+[ok] PE-R2: timeout real -> falhou.flag (terminal)
+[ok] PE-R2: sem fim.flag
+== PE-R3 (real, PE-F02): $TestCmd roda sob o PE em Low IL (nivel 4096)
+[ok] PE-R3: teste.txt com nivel=4096 (teste em Low IL)
+== PE-R4a (real): sem orfao apos encerramento NORMAL (neto no job morre com KILL_ON_JOB_CLOSE)
+[ok] PE-R4a: acao-pe saiu 0 e fim.flag existe
+[ok] PE-R4a: neto (PID+criacao) NAO sobrevive ao encerramento normal
+== PE-R4b (real): sem orfao apos TIMEOUT (TerminateJobObject mata toda a arvore)
+[ok] PE-R4b: timeout -> falhou.flag, sem fim.flag
+[ok] PE-R4b: neto NAO sobrevive ao timeout
+== PE-R4c (real): sem orfao apos FALHA do executor (exit!=0), codigo preservado
+[ok] PE-R4c: exit.code preserva 7 e fim.flag existe
+[ok] PE-R4c: neto NAO sobrevive a falha do executor
+== PE-S7 (PE-F10): rastreamento indisponivel bloqueia (fail-closed); executor NAO roda
+[ok] PE-S7: falhou.flag, sem fim.flag
+[ok] PE-S7: executor bloqueado antes de executar (sem stdout.json)
+== PE-S8 (PE-F07): falha de associacao ao Job bloqueia ANTES de executar (suspenso encerrado)
+[ok] PE-S8: falhou.flag, sem fim.flag
+[ok] PE-S8: executor nao resumido (sem stdout.json)
+== PE-L (PE-F08): -Laco encerra o Job por execucao (neto da 1a morre antes da 2a; acao-pe segue vivo)
+[ok] PE-L: 1a execucao concluiu (fim.flag) sob -Laco
+[ok] PE-L: acao-pe -Laco ainda vivo apos a 1a execucao
+[ok] PE-L: neto da 1a morto pelo teardown do Job (nao so na saida do processo)
+[ok] PE-L: 2a execucao concluiu na MESMA instancia -Laco
+== PE-S9 (P-03): limites do Job — KILL_ON_JOB_CLOSE ligado; BREAKAWAY desligado
+[ok] PE-S9: KILL_ON_JOB_CLOSE ligado
+[ok] PE-S9: BREAKAWAY_OK/SILENT_BREAKAWAY_OK desligados
+
+TOTAL PE: 40 / 40
+== EXITCODE PE: 0 ==
+
+== BATERIA PU (testar-ponte-pu.ps1) - REQ-02 + nucleo ==
+== PU-01: fluxo feliz (executor ok) -> codigo 0, stdout, subarvore morta, sem trava, razao reconciliado (REQ-02)
+[ok] PU-01: codigo 0 e Ok
+[ok] PU-01: stdout com result do executor
+[ok] PU-01: sem violacao e sem trava
+[ok] PU-01: razao com reserva (inicio teto=0.5)
+[ok] PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)
+== PU-02 (REQ-02): executor reporta total_cost_usd INVALIDO (texto) -> custo desconhecido -> 28 + trava financeira
+[ok] PU-02: custo invalido -> codigo 28, violacao
+[ok] PU-02: trava FINANCEIRA gravada
+[ok] PU-02: razao fim custo_desconhecido (nao vira zero, D-06 c)
+[ok] PU-02: evidencia bruta preservada fora do repo
+== PU-13 (N-01): executor Low tenta escrever .git/hooks e .git/config -> NEGADO (.git Medium)
+[ok] PU-13: executor rodou e gravou ataque.txt
+[ok] PU-13: git_hook NEGADO (.git Medium barra Low)
+[ok] PU-13: git_config NEGADO
+== PU-03 (N-02): pasta exec_id pre-existente -> recusa (70), nao despacha
+[ok] PU-03: recusou exec_id pre-existente (codigo 70, violacao)
+[ok] PU-03: nao reutilizou/apagou (residuo fim.flag intacto)
+== PU-07 (reparse): junction na arvore, embrulho NAO varre -> varredura do PU pos-morte -> 70
+[ok] PU-07: reparse detectado -> codigo 70, violacao
+[ok] PU-07: evidencia preservada fora do repo
+[ok] PU-07: trava de seguranca gravada
+== PU-04 (sobrevivente): acao nao-contida deixa neto vivo -> REQ-03 do PU detecta -> 70 + evidencia + trava
+[ok] PU-04: sobrevivente -> codigo 70, violacao
+[ok] PU-04: evidencia preservada
+== PU-10: apos a violacao (PU-04), a 2a chamada e BARRADA pela trava (sem despachar)
+[ok] PU-10: 2a chamada barrada pela trava (codigo 70, motivo=trava)
+== PU-08 (N-06): acao que trava -> timeout do PU, subarvore morta, sem fim.flag -> 28 (financeiro), sem retry
+[ok] PU-08: timeout do PU -> codigo 28 (financeiro), violacao
+[ok] PU-08: trava FINANCEIRA gravada
+
+TOTAL PU: 22 / 22
+== EXITCODE PU: 0 ==
+
+== EXITCODE total: 0 (PE=0 PU=0) ==

@@ -18,11 +18,17 @@ function Checar($nome,[bool]$cond,[string]$det=''){ $script:tot++; if($cond){ $s
 # Monta um ambiente limpo: base com ponte/ trabalho/(+.git) evid/ trava/. Devolve os caminhos.
 function Novo-Amb([bool]$comGit=$true) {
   $base = Join-Path $env:TEMP ('pu-' + [guid]::NewGuid().ToString('N').Substring(0,8))
-  $ponte = Join-Path $base 'ponte'; $trab = Join-Path $base 'trabalho'; $evid = Join-Path $base 'evid'; $trava = Join-Path $base 'trava'
-  New-Item -ItemType Directory -Force $ponte,$trab,$evid,$trava | Out-Null
+  $ponte = Join-Path $base 'ponte'; $trab = Join-Path $base 'trabalho'; $evid = Join-Path $base 'evid'; $trava = Join-Path $base 'trava'; $razao = Join-Path $base 'razao'
+  New-Item -ItemType Directory -Force $ponte,$trab,$evid,$trava,$razao | Out-Null
   [System.IO.File]::WriteAllText((Join-Path $trab 'codigo.txt'), 'x', [Text.UTF8Encoding]::new($false))
   if ($comGit) { New-Item -ItemType Directory -Force (Join-Path $trab '.git\hooks') | Out-Null; [System.IO.File]::WriteAllText((Join-Path $trab '.git\config'), "[core]`n", [Text.UTF8Encoding]::new($false)) }
-  return [pscustomobject]@{ Base=$base; Ponte=$ponte; Trab=$trab; Evid=$evid; Trava=$trava }
+  return [pscustomobject]@{ Base=$base; Ponte=$ponte; Trab=$trab; Evid=$evid; Trava=$trava; Razao=$razao }
+}
+# Le o razao.jsonl do ambiente e devolve os eventos (ou @() se vazio).
+function Eventos-Razao($amb) {
+  $arq = Join-Path $amb.Razao 'razao.jsonl'
+  if (-not (Test-Path $arq)) { return @() }
+  @(Get-Content $arq | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
 }
 function Ped([string]$modo){ return @{ executor=$PwshAprovado; executor_prefixo=("-NoProfile|-File|$fake"); test_cmd=''; teto_usd=0.5 } }
 
@@ -52,14 +58,31 @@ if ($d) { Set-Content (Join-Path $d.FullName 'stdout.json') '{"result":"feito","
 exit 0
 '@ | Set-Content $fakeAcaoReparse -Encoding utf8
 
-"== PU-01: fluxo feliz (executor ok) -> codigo 0, stdout, subarvore morta, sem trava"
+"== PU-01: fluxo feliz (executor ok) -> codigo 0, stdout, subarvore morta, sem trava, razao reconciliado (REQ-02)"
 $a = Novo-Amb
 $env:B05FAKE_MODO = 'ok:0.20'
-$r = Invoke-PontePU-V1 -PonteDir $a.Ponte -TrabDir $a.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -Prompt 'faca' -TimeoutSeg 60 -EvidenciaDir $a.Evid -TravaDir $a.Trava
+$r = Invoke-PontePU-V1 -PonteDir $a.Ponte -TrabDir $a.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -Prompt 'faca' -TimeoutSeg 60 -EvidenciaDir $a.Evid -TravaDir $a.Trava -RazaoDir $a.Razao
 Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
 Checar 'PU-01: codigo 0 e Ok' ($r.Codigo -eq 0 -and $r.Ok) "cod=$($r.Codigo) motivo=$($r.Motivo)"
 Checar 'PU-01: stdout com result do executor' ("$($r.Saida)" -match 'feito')
 Checar 'PU-01: sem violacao e sem trava' (-not $r.Violacao -and -not (Get-ChildItem $a.Trava -Filter *.trava -EA SilentlyContinue))
+$ev1 = Eventos-Razao $a
+$ini1 = @($ev1 | Where-Object { $_.evento -eq 'inicio' -and "$($_.id)" -eq $r.ExecId })
+$fim1 = @($ev1 | Where-Object { $_.evento -eq 'fim' -and "$($_.id)" -eq $r.ExecId })
+Checar 'PU-01: razao com reserva (inicio teto=0.5)' ($ini1.Count -eq 1 -and [double]$ini1[0].teto_usd -eq 0.5) "ini=$($ini1.Count)"
+Checar 'PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)' ($fim1.Count -eq 1 -and -not $fim1[0].PSObject.Properties['custo_desconhecido'] -and [double]$fim1[0].custo_usd -eq 0.20) "fim=$($fim1.Count) custo=$($fim1[0].custo_usd)"
+
+"== PU-02 (REQ-02): executor reporta total_cost_usd INVALIDO (texto) -> custo desconhecido -> 28 + trava financeira"
+$a2 = Novo-Amb
+$env:B05FAKE_MODO = 'custo'; $env:B05FAKE_CUSTO = '"caro"'
+$r2 = Invoke-PontePU-V1 -PonteDir $a2.Ponte -TrabDir $a2.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -Prompt 'x' -TimeoutSeg 60 -EvidenciaDir $a2.Evid -TravaDir $a2.Trava -RazaoDir $a2.Razao
+Remove-Item Env:B05FAKE_MODO,Env:B05FAKE_CUSTO -EA SilentlyContinue
+$ev2 = Eventos-Razao $a2
+$fim2 = @($ev2 | Where-Object { $_.evento -eq 'fim' -and "$($_.id)" -eq $r2.ExecId })
+Checar 'PU-02: custo invalido -> codigo 28, violacao' ($r2.Codigo -eq 28 -and $r2.Violacao) "cod=$($r2.Codigo) motivo=$($r2.Motivo)"
+Checar 'PU-02: trava FINANCEIRA gravada' ([bool](Get-ChildItem $a2.Trava -Filter 'financeira-*.trava' -EA SilentlyContinue))
+Checar 'PU-02: razao fim custo_desconhecido (nao vira zero, D-06 c)' ($fim2.Count -eq 1 -and $fim2[0].custo_desconhecido -eq $true) "fim=$($fim2.Count)"
+Checar 'PU-02: evidencia bruta preservada fora do repo' ([bool]$r2.Evidencia -and (Test-Path $r2.Evidencia))
 
 "== PU-13 (N-01): executor Low tenta escrever .git/hooks e .git/config -> NEGADO (.git Medium)"
 $b = Novo-Amb $true

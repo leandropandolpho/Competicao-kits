@@ -127,6 +127,9 @@ function Processar([string]$dir) {
 
   try {
   $cTmp = Join-Path ($env:TEMP) ('pe-' + $execId.Substring(0,12)); New-Item -ItemType Directory -Force $cTmp | Out-Null
+  # D-06 (classificacao financeira por fase): marca que o executor VAI ser invocado. O PU usa a presenca de invocou.flag
+  # para distinguir falha ANTERIOR a invocacao (custo 0) de falha POSTERIOR (custo desconhecido, reserva mantida).
+  Grava $dir 'invocou.flag' ([string](Agora))
   $pid_exec = 0; $criacao = ''; $nivel = $null; $emJob = $null; $saida = ''; $erro = ''; $codigo = -2
 
   if ($Simular) {

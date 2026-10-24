@@ -12,6 +12,7 @@ Set-StrictMode -Version 3.0
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot '..\b05job.ps1')             # [B05Job]: Snapshot, Subarvore, Encerrar
 . (Join-Path $PSScriptRoot '..\baixa-integridade.ps1')  # B05LowIL-ReparsePoints, RotularMedio, InfoLabel
+. (Join-Path $PSScriptRoot '..\razao.ps1')              # REQ-02/I3: razao SO o PU grava (reserva, custo, fim)
 
 function PU-Icacls([string[]]$a){ & "$env:SystemRoot\System32\icacls.exe" @a *> $null; if ($LASTEXITCODE -ne 0) { throw "icacls falhou ($LASTEXITCODE): $($a -join ' ')" } }
 
@@ -87,6 +88,32 @@ function PU-Preservar-Evidencia([string]$trabDir,[string]$ponteExecDir,[string]$
   return $dest
 }
 
+# REQ-02 (validacao de custo): total_cost_usd do stdout do executor so e CONHECIDO se for numero JSON finito >= 0.
+# String (contrato violado), negativo, NaN/Infinito, ausente => DESCONHECIDO. Nunca vira zero (D-06 c).
+function PU-CustoConhecido($stdoutJson,[ref]$valor) {
+  if (-not $stdoutJson) { return $false }
+  try { $o = $stdoutJson | ConvertFrom-Json -ErrorAction Stop } catch { return $false }
+  if (-not $o.PSObject.Properties['total_cost_usd']) { return $false }
+  $v = $o.total_cost_usd
+  if ($null -eq $v) { return $false }
+  if ($v -is [string] -or $v -is [bool] -or $v -is [array]) { return $false }   # custo como texto/flag/lista = invalido
+  $d = 0.0; try { $d = [double]$v } catch { return $false }
+  if ([double]::IsNaN($d) -or [double]::IsInfinity($d) -or $d -lt 0) { return $false }
+  $valor.Value = $d; return $true
+}
+# REQ-02/I3/D-06: reserva (evento 'inicio') e fecho (evento 'fim') no razao, gravados SO pelo PU. 'fim' conhecido leva
+# custo_usd; 'fim' desconhecido leva custo_desconhecido=$true (reserva permanece contabilizada, nao vira zero).
+function PU-Razao-Inicio([string]$razaoDir,[string]$execId,[double]$teto) {
+  if (-not $razaoDir) { return }
+  Razao-Gravar $razaoDir @{ evento='inicio'; id=$execId; teto_usd=$teto; origem='ponte-pu' }
+}
+function PU-Razao-Fim([string]$razaoDir,[string]$execId,[bool]$desconhecido,[double]$custo,[string]$fase) {
+  if (-not $razaoDir) { return }
+  $ev = @{ evento='fim'; id=$execId; fase=$fase; origem='ponte-pu' }
+  if ($desconhecido) { $ev['custo_desconhecido'] = $true } else { $ev['custo_usd'] = $custo }
+  Razao-Gravar $razaoDir $ev
+}
+
 function Invoke-PontePU-V1 {
   param(
     [Parameter(Mandatory)][string]$PonteDir,
@@ -99,7 +126,10 @@ function Invoke-PontePU-V1 {
     [Parameter(Mandatory)][string]$TravaDir,       # N-07: obrigatorio (fora do repo)
     [string]$Prompt = '',
     [int]$TimeoutSeg = 120,
-    [string]$ExecId
+    [string]$ExecId,
+    [string]$RazaoDir = '',    # REQ-02: razao do PU (fora do repo). Vazio => modo nucleo sem contabilizacao.
+    [double]$Folga = 0.25,     # contrato v3.1: reserva = teto * (1+folga)
+    [double]$MaxUsd = 0        # admissao B+K+R+T(1+F) <= M; 0 => sem teto de admissao
   )
   $res = [ordered]@{ Ok=$false; Codigo=70; Saida=''; Erro=''; Violacao=$false; Motivo=''; ExecId=$null; Evidencia=$null }
   # N-07: trava persistente bloqueia novas chamadas (fail-closed)
@@ -116,11 +146,29 @@ function Invoke-PontePU-V1 {
     $res.Violacao=$true; $res.Motivo="N-02: pasta exec_id ja existe ($ExecId) - recusado"
     try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res
   }
+  # REQ-02/D-06: teto da chamada (reserva = teto*(1+folga)). Admissao e reserva ANTES de qualquer disparo.
+  $teto = 0.0; if ($Pedido.ContainsKey('teto_usd') -and $null -ne $Pedido['teto_usd']) { try { $teto = [double]$Pedido['teto_usd'] } catch { $teto = 0.0 } }
+  if ($RazaoDir) {
+    $rz = Razao-Ler $RazaoDir
+    if (-not $rz.Ok) {   # razao ilegivel bloqueia (E4): sem contabilidade confiavel, nao dispara (financeiro, sem gasto)
+      $res.Violacao=$true; $res.Codigo=28; $res.Motivo="REQ-02: razao ilegivel - bloqueio financeiro (sem disparo): $($rz.Motivo)"
+      try { PU-Gravar-Trava $TravaDir 'financeira' $res.Motivo $ExecId } catch { }; return $res
+    }
+    if ($MaxUsd -gt 0) {   # admissao: B + K + R (atual) + reserva desta chamada <= M
+      $cont = Razao-Contabilizar $rz.Eventos $Folga
+      $projecao = [double]$cont.Total + ($teto * (1 + $Folga))
+      if ($projecao -gt $MaxUsd) {
+        $res.Violacao=$true; $res.Codigo=28; $res.Motivo=("REQ-02: admissao negada (projecao {0:N4} > M {1:N4}; B+K+R={2:N4}) - sem disparo" -f $projecao,$MaxUsd,$cont.Total)
+        try { PU-Gravar-Trava $TravaDir 'financeira' $res.Motivo $ExecId } catch { }; return $res
+      }
+    }
+  }
   New-Item -ItemType Directory -Force $dir | Out-Null
   [System.IO.File]::WriteAllText((Join-Path $dir 'prompt.in'), $Prompt, $Utf8)
   $ped = [ordered]@{ exec_id=$ExecId }; foreach ($k in $Pedido.Keys) { $ped[$k] = $Pedido[$k] }
   $ped['pwsh_sha256'] = $PwshSha256; $ped['criado_em'] = (Get-Date).ToString('o')
   [System.IO.File]::WriteAllText((Join-Path $dir 'pedido.json'), ($ped | ConvertTo-Json -Compress), $Utf8)
+  PU-Razao-Inicio $RazaoDir $ExecId $teto   # RESERVA (contabilizada) ANTES do disparo
   if ($IsWindows) { PU-RotularArvore $TrabDir }   # N-01: Low na arvore, Medium em .git (fail-closed)
   [System.IO.File]::WriteAllText((Join-Path $dir 'go.flag'), '1', $Utf8)
   # Lanca o acao-pe LOCALMENTE (processo comum, execucao unica). N-05: identidade (PID+criacao) OBRIGATORIA.
@@ -154,31 +202,69 @@ function Invoke-PontePU-V1 {
   if (-not $rep.Ok -or @($rep.Pontos).Count -or -not $repP.Ok -or @($repP.Pontos).Count) {
     $res.Violacao = $true; $res.Motivo = ("$($res.Motivo) | reparse: " + ([string]::Join('; ', @($rep.Pontos) + @($repP.Pontos)))).Trim(' |')
   }
-  # VIOLACAO de seguranca -> evidencia (apos a varredura) + trava + codigo 70
+  # VIOLACAO de seguranca -> evidencia (apos a varredura) + trava + codigo 70. Custo DESCONHECIDO (executor pode ter
+  # gastado antes de a contencao falhar): reserva permanece contabilizada (D-06, nunca vira zero).
   if ($res.Violacao) {
     try { $res.Evidencia = PU-Preservar-Evidencia $TrabDir $dir $EvidenciaDir $ExecId } catch { $res.Motivo += " | falha evidencia: $($_.Exception.Message)" }
     try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }
+    try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'violacao-seguranca' } catch { }
     PU-Lease-Fechar $TravaDir $ExecId; $res.Codigo = 70; return $res
   }
-  # N-06: timeout com subarvore MORTA e sem violacao => custo DESCONHECIDO (sem fim.flag). Bloqueio FINANCEIRO, SEM retry.
+  # N-06/D-06(c): timeout com subarvore MORTA e sem violacao => custo DESCONHECIDO (sem fim.flag). Bloqueio FINANCEIRO,
+  # SEM retry. Reserva permanece contabilizada (nao vira zero).
   if ($houveTimeout) {
     $res.Violacao=$true; $res.Codigo=28
     $res.Motivo=("$($res.Motivo) | N-06: timeout com custo desconhecido (sem fim.flag) - bloqueio financeiro, sem retry").Trim(' |')
     try { $res.Evidencia = PU-Preservar-Evidencia $TrabDir $dir $EvidenciaDir $ExecId } catch { $res.Motivo += " | falha evidencia: $($_.Exception.Message)" }
     try { PU-Gravar-Trava $TravaDir 'financeira' $res.Motivo $ExecId } catch { }
+    try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'timeout-desconhecido' } catch { }
     PU-Lease-Fechar $TravaDir $ExecId; return $res
   }
   PU-Lease-Fechar $TravaDir $ExecId
   # Sem violacao: artefatos confiaveis (PE morto, sem reparse). N-03: confere exec_id no fim.flag.
-  if (Test-Path -LiteralPath (Join-Path $dir 'falhou.flag')) { $res.Codigo = 1; $res.Motivo = 'falhou.flag (falha comum)'; $res.Erro = (Get-Content -LiteralPath (Join-Path $dir 'erro-pe.txt') -Raw -ErrorAction SilentlyContinue); return $res }
-  if (-not (Test-Path -LiteralPath (Join-Path $dir 'fim.flag'))) { $res.Codigo = 1; $res.Motivo = 'sem fim.flag/falhou.flag (indeterminado = falha comum)'; return $res }
-  try { $fim = Get-Content -LiteralPath (Join-Path $dir 'fim.flag') -Raw | ConvertFrom-Json } catch { $res.Violacao=$true; $res.Codigo=70; $res.Motivo='N-03: fim.flag ilegivel'; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
-  if ("$($fim.exec_id)" -ne $ExecId) { $res.Violacao=$true; $res.Codigo=70; $res.Motivo="N-03: exec_id do fim.flag ($($fim.exec_id)) != esperado ($ExecId)"; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
+  # D-06: classificacao fina de falhou.flag por FASE (elimina a equivalencia generica falhou.flag/falha-comum):
+  #  (d) falha de teste  = executor rodou e reportou custo CONHECIDO, mas a fase de teste reprovou -> custo conhecido, retry;
+  #  (c) posterior desc. = invocou o executor mas sem custo confiavel -> custo DESCONHECIDO (reserva permanece), retry;
+  #  (a) anterior        = falhou ANTES de invocar o executor (sem invocou.flag) -> custo 0 CONHECIDO.
+  if (Test-Path -LiteralPath (Join-Path $dir 'falhou.flag')) {
+    $res.Codigo = 1; $res.Erro = (Get-Content -LiteralPath (Join-Path $dir 'erro-pe.txt') -Raw -ErrorAction SilentlyContinue)
+    $invocou = Test-Path -LiteralPath (Join-Path $dir 'invocou.flag')
+    $std = (Get-Content -LiteralPath (Join-Path $dir 'stdout.json') -Raw -ErrorAction SilentlyContinue)
+    $cv = 0.0
+    if ($invocou -and (PU-CustoConhecido $std ([ref]$cv))) {
+      $res.Motivo = 'D-06(d): falha de teste apos executor (custo conhecido)'; try { PU-Razao-Fim $RazaoDir $ExecId $false $cv 'falha-teste' } catch { }
+    } elseif ($invocou) {
+      $res.Motivo = 'D-06(c): falha posterior a invocacao, custo desconhecido (reserva mantida)'; try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'posterior-desconhecido' } catch { }
+    } else {
+      $res.Motivo = 'D-06(a): falha anterior a invocacao do executor (custo 0)'; try { PU-Razao-Fim $RazaoDir $ExecId $false 0 'anterior-invocacao' } catch { }
+    }
+    return $res
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $dir 'fim.flag'))) {   # indeterminado: conservador => custo desconhecido
+    $res.Codigo = 1; $res.Motivo = 'sem fim.flag/falhou.flag (indeterminado = falha comum)'; try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'indeterminado' } catch { }; return $res
+  }
+  try { $fim = Get-Content -LiteralPath (Join-Path $dir 'fim.flag') -Raw | ConvertFrom-Json } catch { $res.Violacao=$true; $res.Codigo=70; $res.Motivo='N-03: fim.flag ilegivel'; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'fim-ilegivel' } catch { }; return $res }
+  if ("$($fim.exec_id)" -ne $ExecId) { $res.Violacao=$true; $res.Codigo=70; $res.Motivo="N-03: exec_id do fim.flag ($($fim.exec_id)) != esperado ($ExecId)"; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'exec-id-divergente' } catch { }; return $res }
   $res.Saida = (Get-Content -LiteralPath (Join-Path $dir 'stdout.json') -Raw -ErrorAction SilentlyContinue)
   $res.Erro  = (Get-Content -LiteralPath (Join-Path $dir 'stderr.txt') -Raw -ErrorAction SilentlyContinue)
+  # REQ-02/D-06(b vs c): reconcilia o custo do executor. CONHECIDO (numero finito>=0) -> 'fim' custo_usd, codigo 0.
+  # INVALIDO (texto/negativo/NaN/ausente) -> executor violou o contrato de custo: custo DESCONHECIDO + evidencia bruta
+  # + trava FINANCEIRA + codigo 28 (REQ-02 TN). Reserva permanece contabilizada.
+  if ($RazaoDir) {
+    $cv = 0.0
+    if (PU-CustoConhecido $res.Saida ([ref]$cv)) {
+      try { PU-Razao-Fim $RazaoDir $ExecId $false $cv 'posterior-conhecido' } catch { }
+    } else {
+      $res.Violacao=$true; $res.Codigo=28; $res.Motivo='REQ-02: total_cost_usd invalido/ausente no stdout do executor - custo desconhecido, bloqueio financeiro'
+      try { $res.Evidencia = PU-Preservar-Evidencia $TrabDir $dir $EvidenciaDir $ExecId } catch { $res.Motivo += " | falha evidencia: $($_.Exception.Message)" }
+      try { PU-Gravar-Trava $TravaDir 'financeira' $res.Motivo $ExecId } catch { }
+      try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'posterior-custo-invalido' } catch { }
+      return $res
+    }
+  }
   $res.Ok = $true; $res.Codigo = 0
   return $res
-  # PENDENTE (rumo ao congelamento): REQ-02 (reserva/custo no razao do PU), REQ-04/REQ-12 fase teste (Job novo,
-  # fronteira de IL, despachante P-B com SHA), REQ-08 integracao 2 fases no claude-com-teto (controlador 7cd7864 diff
-  # vazio), bateria PU-01..PU-13 + regressao C4/C6, copia confiavel do PU (hash/IL), precedencia de R1 (HOLD vs failed).
+  # PENDENTE (rumo ao congelamento): REQ-04/REQ-12 fase teste dedicada (despachante P-B com SHA, Job novo),
+  # REQ-08 integracao 2 fases no claude-com-teto (controlador 7cd7864 diff vazio), bateria PU-05/06/09/11/11b/12 +
+  # regressao C4/C6, copia confiavel do PU (hash/IL), precedencia de R1 (HOLD vs failed).
 }
