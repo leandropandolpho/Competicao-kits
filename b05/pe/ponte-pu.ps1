@@ -29,9 +29,9 @@ function PU-Gravar-Trava([string]$travaDir,[string]$tipo,[string]$motivo,[string
   [System.IO.File]::WriteAllText($f, (@{ tipo=$tipo; motivo=$motivo; exec_id=$execId; quando=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress), $Utf8)
 }
 # N-08 (lease): registra (pid,criacao) do embrulho FORA do repo ANTES de esperar, para pre-flight/retomada (C6) localizar orfaos.
-function PU-Lease-Gravar([string]$travaDir,[string]$execId,[uint32]$pid,[long]$cri) {
+function PU-Lease-Gravar([string]$travaDir,[string]$execId,[uint32]$lpid,[long]$cri) {
   New-Item -ItemType Directory -Force $travaDir | Out-Null
-  [System.IO.File]::WriteAllText((Join-Path $travaDir "$execId.lease"), (@{ exec_id=$execId; pid=$pid; criacao=$cri; aberto=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress), $Utf8)
+  [System.IO.File]::WriteAllText((Join-Path $travaDir "$execId.lease"), (@{ exec_id=$execId; pid=$lpid; criacao=$cri; aberto=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress), $Utf8)
 }
 function PU-Lease-Fechar([string]$travaDir,[string]$execId) { Remove-Item -LiteralPath (Join-Path $travaDir "$execId.lease") -Force -ErrorAction SilentlyContinue }
 
