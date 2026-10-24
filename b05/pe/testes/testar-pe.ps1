@@ -75,5 +75,44 @@ Push-Location $a4.Trab
 try { & $PwshAprovado -NoProfile -File $acao -PonteDir $a4.Ponte -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Simular -TimeoutSeg 3 2>&1 | Out-Null; $c4=$LASTEXITCODE } catch { $c4=99 } finally { Pop-Location; Remove-Item Env:B05FAKE_MODO -ErrorAction SilentlyContinue }
 Checar 'PE-S4: timeout bloqueia (codigo != 0, sem fim.flag)' ($c4 -ne 0 -and -not (Test-Path (Join-Path $a4.Dir 'fim.flag'))) "codigo $c4"
 
-"`nTOTAL PE-SIM: $ok / $tot"
+"== PE-S5 (PE-F05): falha vira estado terminal (falhou.flag) e NAO e reselecionada"
+$a5 = Nova-Execucao 'ok:0.10'
+# executor inexistente -> Processar lanca -> Tratar grava falhou.flag (terminal)
+$ped5 = Get-Content (Join-Path $a5.Dir 'pedido.json') -Raw | ConvertFrom-Json
+$ped5.executor = 'executor-inexistente-xyz.exe'; ($ped5|ConvertTo-Json -Compress) | Set-Content (Join-Path $a5.Dir 'pedido.json')
+Push-Location $a5.Trab
+try { & $PwshAprovado -NoProfile -File $acao -PonteDir $a5.Ponte -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Simular 2>&1 | Out-Null } catch {} finally { Pop-Location }
+Checar 'PE-S5: falhou.flag gravado (terminal)' (Test-Path (Join-Path $a5.Dir 'falhou.flag'))
+Checar 'PE-S5: sem fim.flag' (-not (Test-Path (Join-Path $a5.Dir 'fim.flag')))
+# 2a passada na MESMA ponte: a execucao falha nao e reselecionada -> acao-pe nao acha pendente (sai != 0 por 'nenhuma pendente')
+Push-Location $a5.Trab
+try { & $PwshAprovado -NoProfile -File $acao -PonteDir $a5.Ponte -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Simular 2>&1 | Out-Null; $c5=$LASTEXITCODE } catch { $c5=99 } finally { Pop-Location }
+Checar 'PE-S5: 2a passada nao reprocessa a falha (nenhuma pendente)' ($c5 -ne 0 -and -not (Test-Path (Join-Path $a5.Dir 'fim.flag')))
+
+# ---- Casos REAIS (Low IL): so no Windows. Executor fake rodado em baixa integridade; arvore de trabalho rotulada Low. ----
+if ($IsWindows) {
+  function Real($a,[int]$to=60){ & icacls $a.Trab /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
+    Push-Location $a.Trab
+    try { & $PwshAprovado -NoProfile -File $acao -PonteDir $a.Ponte -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -TimeoutSeg $to 2>&1 | Out-Null; $c=$LASTEXITCODE } catch { $c=99 } finally { Pop-Location }
+    return $c }
+
+  "== PE-R1 (real): executor em Low IL -> nivel_il 4096, em_job, fim.flag"
+  $r1 = Nova-Execucao 'ok:0.20'; $env:B05FAKE_MODO='ok:0.20'; $cr1 = Real $r1; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+  Checar 'PE-R1: acao-pe saiu 0' ($cr1 -eq 0) "codigo $cr1"
+  Checar 'PE-R1: fim.flag existe' (Test-Path (Join-Path $r1.Dir 'fim.flag'))
+  if (Test-Path (Join-Path $r1.Dir 'pe.pid')) { $pp=Get-Content (Join-Path $r1.Dir 'pe.pid') -Raw|ConvertFrom-Json
+    Checar 'PE-R1: executor em nivel 4096 (Low IL real)' ($pp.nivel_il -eq 4096) "nivel=$($pp.nivel_il)"
+    Checar 'PE-R1: em_job verdadeiro' ($pp.em_job -eq $true) "em_job=$($pp.em_job)" }
+
+  "== PE-R2 (real, PE-F01): timeout real -> EsperarSinal detecta, falhou.flag, SEM fim.flag (acao-pe sobrevive)"
+  $r2 = Nova-Execucao 'dorme:20'; $env:B05FAKE_MODO='dorme:20'; $cr2 = Real $r2 3; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+  Checar 'PE-R2: timeout real -> falhou.flag (terminal)' (Test-Path (Join-Path $r2.Dir 'falhou.flag'))
+  Checar 'PE-R2: sem fim.flag' (-not (Test-Path (Join-Path $r2.Dir 'fim.flag')))
+
+  "== PE-R3 (real, PE-F02): `$TestCmd roda sob o PE em Low IL (nivel 4096)"
+  $r3 = Nova-Execucao 'ok:0.10' 'Write-Output ok; exit 0'; $env:B05FAKE_MODO='ok:0.10'; $cr3 = Real $r3; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+  Checar 'PE-R3: teste.txt com nivel=4096 (teste em Low IL)' ((Test-Path (Join-Path $r3.Dir 'teste.txt')) -and ((Get-Content (Join-Path $r3.Dir 'teste.txt') -Raw) -match 'nivel=4096')) "t=$(if(Test-Path (Join-Path $r3.Dir 'teste.txt')){Get-Content (Join-Path $r3.Dir 'teste.txt') -Raw})"
+}
+
+"`nTOTAL PE: $ok / $tot"
 exit ([int]($ok -ne $tot))

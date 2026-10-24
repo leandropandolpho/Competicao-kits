@@ -99,6 +99,9 @@ public static class B05LowIL {
     pid = pi.pid; hProc = pi.hp; CloseHandle(pi.ht); return "";
   }
   public static uint Esperar(IntPtr hProc, uint ms) { WaitForSingleObject(hProc, ms); uint c; return GetExitCodeProcess(hProc, out c) ? c : 0xFFFFFFFF; }
+  // PE-F01: devolve o RESULTADO da espera (0=WAIT_OBJECT_0 sinalizado; 0x102=258 WAIT_TIMEOUT; 0xFFFFFFFF=WAIT_FAILED).
+  // So apos sinalizado e que GetExitCodeProcess devolve o codigo real (senao 259 STILL_ACTIVE). Esperar() fica intacto (B-05).
+  public static uint EsperarSinal(IntPtr hProc, uint ms) { return WaitForSingleObject(hProc, ms); }
   public static long CriacaoUtc(IntPtr hProc) { long c, x, k, u; return GetProcessTimes(hProc, out c, out x, out k, out u) ? c : 0; }
   public static void Encerrar(IntPtr hProc) { try { TerminateProcess(hProc, 1); } catch { } }
   public static void Fechar(IntPtr h) { if (h != IntPtr.Zero) CloseHandle(h); }
