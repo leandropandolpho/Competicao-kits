@@ -107,9 +107,15 @@ function Rodar-LowIL([IntPtr]$job,[string]$exe,[string[]]$argz,[string]$cwd,[has
 function Processar([string]$dir) {
   $ped = Get-Content -LiteralPath (Join-Path $dir 'pedido.json') -Raw -Encoding utf8 | ConvertFrom-Json
   $execId = "$($ped.exec_id)"
+  # D-2 (despachante P-B, Ato 147): modo SOMENTE-TESTE. O despachante do PU aciona a ponte em modo exclusivo de teste,
+  # numa invocacao NOVA do acao-pe (logo, Job NOVO e independente). Nao roda o executor; roda SO o $TestCmd sob o PE em
+  # Low IL, no Job novo, sem a chave. Mantem I2 (o PU nunca executa o codigo do repo; quem roda o teste e o PE em Low).
+  $somenteTeste = $ped.PSObject.Properties['somente_teste'] -and $ped.somente_teste
   $entrada = if (Test-Path (Join-Path $dir 'prompt.in')) { [System.IO.File]::ReadAllText((Join-Path $dir 'prompt.in'), $Utf8) } else { '' }
-  $exe = "$($ped.executor)"
-  $argExec = @(if ("$($ped.executor_prefixo)") { "$($ped.executor_prefixo)" -split '\|' }) + @('-p') +
+  # Acesso seguro (StrictMode): no modo somente-teste o pedido nao traz executor/executor_prefixo.
+  $exe = if ($ped.PSObject.Properties['executor']) { "$($ped.executor)" } else { '' }
+  $prefixo = if ($ped.PSObject.Properties['executor_prefixo']) { "$($ped.executor_prefixo)" } else { '' }
+  $argExec = @(if ($prefixo) { $prefixo -split '\|' }) + @('-p') +
              @(if ($ped.PSObject.Properties['teto_usd'] -and $ped.teto_usd) { '--max-budget-usd', ([string]$ped.teto_usd).Replace(',', '.') })
   Grava $dir 'heartbeat' ([string](Agora))
 
@@ -127,51 +133,57 @@ function Processar([string]$dir) {
 
   try {
   $cTmp = Join-Path ($env:TEMP) ('pe-' + $execId.Substring(0,12)); New-Item -ItemType Directory -Force $cTmp | Out-Null
-  # D-06 (classificacao financeira por fase): marca que o executor VAI ser invocado. O PU usa a presenca de invocou.flag
-  # para distinguir falha ANTERIOR a invocacao (custo 0) de falha POSTERIOR (custo desconhecido, reserva mantida).
-  Grava $dir 'invocou.flag' ([string](Agora))
   $pid_exec = 0; $criacao = ''; $nivel = $null; $emJob = $null; $saida = ''; $erro = ''; $codigo = -2
 
-  if ($Simular) {
-    $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
-    foreach ($a in $argExec) { $psi.ArgumentList.Add($a) }
-    $psi.UseShellExecute = $false; $psi.WorkingDirectory = (Get-Location).Path
-    $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-    $psi.StandardOutputEncoding = $Utf8; $psi.StandardErrorEncoding = $Utf8
-    foreach ($kv in (Ambiente-PE $cTmp).GetEnumerator()) { $psi.Environment[$kv.Key] = $kv.Value }
-    $p = [System.Diagnostics.Process]::Start($psi); $pid_exec = $p.Id
-    [void][B05Job]::AssignProcessToJobObject($job, $p.Handle)   # associa o filho (nao o acao-pe)
-    try { [B05Job]::Rastrear([uint32]$pid_exec) } catch { }
-    try { $criacao = $p.StartTime.ToUniversalTime().ToString('o') } catch { $criacao = (Get-Date).ToUniversalTime().ToString('o') }
-    $r0 = $false; if ($IsWindows) { try { $emJob = ([B05Job]::IsProcessInJob($p.Handle, [IntPtr]::Zero, [ref]$r0)) -and $r0 } catch { } }
-    Grava $dir 'pe.pid' (Json @{ pid = $pid_exec; criacao_utc = $criacao; nivel_il = $nivel; em_job = $emJob })
-    $out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
-    try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b,0,$b.Length); $p.StandardInput.Close() } catch { }
-    if (-not $p.WaitForExit($TimeoutSeg * 1000)) { [void][B05Job]::TerminateJobObject($job, 29); throw "timeout ${TimeoutSeg}s: job encerrado" }
-    $saida = $out.Result; $erro = $err.Result; $codigo = $p.ExitCode
+  if ($somenteTeste) {
+    # Modo somente-teste (D-2): NAO roda o executor; o $TestCmd roda abaixo, neste Job NOVO. Sem invocou.flag (nao ha
+    # executor) e sem stdout.json/exit.code/pe.pid do executor. A contencao e conferida apos o teste.
+    $codigo = 0
   } else {
-    $cmd = Get-Command -Name $exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($cmd) { $exe = $cmd.Source }
-    & icacls $cTmp /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null   # so a E/S bruta e a arvore sao Low; metadados IPC ficam Medium
-    [System.IO.File]::WriteAllText("$cTmp\in.txt", $entrada, $Utf8)
-    $res = Rodar-LowIL $job $exe $argExec (Get-Location).Path (Ambiente-PE $cTmp $true) $cTmp $TimeoutSeg
-    $pid_exec = $res.Pid; $criacao = [DateTime]::FromFileTimeUtc($res.Criacao).ToString('o'); $nivel = $res.Nivel; $emJob = $res.EmJob
-    Grava $dir 'pe.pid' (Json @{ pid = $pid_exec; criacao_utc = $criacao; nivel_il = $nivel; em_job = $emJob })
-    if ($emJob -ne $true) { throw "executor fora do job (em_job=$emJob)" }
-    if ($nivel -ne 4096) { throw "executor nao esta em baixa integridade (nivel $nivel)" }
-    $saida = $res.Saida; $erro = $res.Erro; $codigo = $res.Codigo
-    $rep = B05LowIL-ReparsePoints (Get-Location).Path
-    if (-not $rep.Ok -or @($rep.Pontos).Count) { throw "reparse point/varredura incompleta: $(@($rep.Pontos) -join '; ')" }
+    # D-06 (classificacao financeira por fase): marca que o executor VAI ser invocado. O PU usa invocou.flag para
+    # distinguir falha ANTERIOR a invocacao (custo 0) de falha POSTERIOR (custo desconhecido, reserva mantida).
+    Grava $dir 'invocou.flag' ([string](Agora))
+    if ($Simular) {
+      $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+      foreach ($a in $argExec) { $psi.ArgumentList.Add($a) }
+      $psi.UseShellExecute = $false; $psi.WorkingDirectory = (Get-Location).Path
+      $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+      $psi.StandardOutputEncoding = $Utf8; $psi.StandardErrorEncoding = $Utf8
+      foreach ($kv in (Ambiente-PE $cTmp).GetEnumerator()) { $psi.Environment[$kv.Key] = $kv.Value }
+      $p = [System.Diagnostics.Process]::Start($psi); $pid_exec = $p.Id
+      [void][B05Job]::AssignProcessToJobObject($job, $p.Handle)   # associa o filho (nao o acao-pe)
+      try { [B05Job]::Rastrear([uint32]$pid_exec) } catch { }
+      try { $criacao = $p.StartTime.ToUniversalTime().ToString('o') } catch { $criacao = (Get-Date).ToUniversalTime().ToString('o') }
+      $r0 = $false; if ($IsWindows) { try { $emJob = ([B05Job]::IsProcessInJob($p.Handle, [IntPtr]::Zero, [ref]$r0)) -and $r0 } catch { } }
+      Grava $dir 'pe.pid' (Json @{ pid = $pid_exec; criacao_utc = $criacao; nivel_il = $nivel; em_job = $emJob })
+      $out = $p.StandardOutput.ReadToEndAsync(); $err = $p.StandardError.ReadToEndAsync()
+      try { $b = $Utf8.GetBytes($entrada); $p.StandardInput.BaseStream.Write($b,0,$b.Length); $p.StandardInput.Close() } catch { }
+      if (-not $p.WaitForExit($TimeoutSeg * 1000)) { [void][B05Job]::TerminateJobObject($job, 29); throw "timeout ${TimeoutSeg}s: job encerrado" }
+      $saida = $out.Result; $erro = $err.Result; $codigo = $p.ExitCode
+    } else {
+      $cmd = Get-Command -Name $exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($cmd) { $exe = $cmd.Source }
+      & icacls $cTmp /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null   # so a E/S bruta e a arvore sao Low; metadados IPC ficam Medium
+      [System.IO.File]::WriteAllText("$cTmp\in.txt", $entrada, $Utf8)
+      $res = Rodar-LowIL $job $exe $argExec (Get-Location).Path (Ambiente-PE $cTmp $true) $cTmp $TimeoutSeg
+      $pid_exec = $res.Pid; $criacao = [DateTime]::FromFileTimeUtc($res.Criacao).ToString('o'); $nivel = $res.Nivel; $emJob = $res.EmJob
+      Grava $dir 'pe.pid' (Json @{ pid = $pid_exec; criacao_utc = $criacao; nivel_il = $nivel; em_job = $emJob })
+      if ($emJob -ne $true) { throw "executor fora do job (em_job=$emJob)" }
+      if ($nivel -ne 4096) { throw "executor nao esta em baixa integridade (nivel $nivel)" }
+      $saida = $res.Saida; $erro = $res.Erro; $codigo = $res.Codigo
+      $rep = B05LowIL-ReparsePoints (Get-Location).Path
+      if (-not $rep.Ok -or @($rep.Pontos).Count) { throw "reparse point/varredura incompleta: $(@($rep.Pontos) -join '; ')" }
+    }
+
+    # PE-F03: verificacao REAL de contencao - nenhum descendente rastreado vivo fora do job. (A prova externa definitiva
+    # de ausencia de orfaos + morte do PE e do PU, apos fim.flag, por PID+criacao; aqui e a checagem local fail-closed.)
+    $viol = [B05Job]::Verificar($job)
+    if (@($viol).Count) { throw "contencao: descendente fora do job/orfao: $(@($viol) -join '; ')" }
+
+    Grava $dir 'stdout.json' $saida
+    Grava $dir 'stderr.txt' $erro
+    Grava $dir 'exit.code' ([string]$codigo)
   }
-
-  # PE-F03: verificacao REAL de contencao - nenhum descendente rastreado vivo fora do job. (A prova externa definitiva
-  # de ausencia de orfaos + morte do PE e do PU, apos fim.flag, por PID+criacao; aqui e a checagem local fail-closed.)
-  $viol = [B05Job]::Verificar($job)
-  if (@($viol).Count) { throw "contencao: descendente fora do job/orfao: $(@($viol) -join '; ')" }
-
-  Grava $dir 'stdout.json' $saida
-  Grava $dir 'stderr.txt' $erro
-  Grava $dir 'exit.code' ([string]$codigo)
 
   # PE-F02/PE-F04/Gemini-2.2: $TestCmd sob o PE, apos o executor morto, em Low IL (real) e SEM a chave; timeout/falha = erro terminal.
   if ("$($ped.test_cmd)") {
@@ -197,6 +209,14 @@ function Processar([string]$dir) {
       try { Remove-Item -Recurse -Force $cT -ErrorAction SilentlyContinue } catch { }
       if ($rt.Codigo -ne 0) { throw "PE-F09: TestCmd reprovado (codigo $($rt.Codigo)) — estado terminal, sem fim.flag" }
     }
+  } elseif ($somenteTeste) {
+    throw 'D-2: modo somente-teste sem test_cmd — nada a executar (falha fechada)'
+  }
+  if ($somenteTeste) {
+    # D-2: conferencia de contencao e reparse APOS o teste (pulamos a do executor). O PU reconfirma a morte da subarvore.
+    $violT = [B05Job]::Verificar($job)
+    if (@($violT).Count) { throw "contencao (somente-teste): descendente fora do job/orfao: $(@($violT) -join '; ')" }
+    if (-not $Simular) { $repT = B05LowIL-ReparsePoints (Get-Location).Path; if (-not $repT.Ok -or @($repT.Pontos).Count) { throw "reparse (somente-teste): $(@($repT.Pontos) -join '; ')" } }
   }
   try { Remove-Item -Recurse -Force $cTmp -ErrorAction SilentlyContinue } catch { }
 

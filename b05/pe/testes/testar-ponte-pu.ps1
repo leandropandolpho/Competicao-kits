@@ -83,6 +83,11 @@ Checar 'PU-02: custo invalido -> codigo 28, violacao' ($r2.Codigo -eq 28 -and $r
 Checar 'PU-02: trava FINANCEIRA gravada' ([bool](Get-ChildItem $a2.Trava -Filter 'financeira-*.trava' -EA SilentlyContinue))
 Checar 'PU-02: razao fim custo_desconhecido (nao vira zero, D-06 c)' ($fim2.Count -eq 1 -and $fim2[0].custo_desconhecido -eq $true) "fim=$($fim2.Count)"
 Checar 'PU-02: evidencia bruta preservada fora do repo' ([bool]$r2.Evidencia -and (Test-Path $r2.Evidencia))
+# PU-02b (D-3/ChatGPT Ato 147): a trava FINANCEIRA gravada por PU-02 barra a 2a chamada com codigo 28 (nao 70 generico)
+$env:B05FAKE_MODO = 'ok:0.10'
+$r2b = Invoke-PontePU-V1 -PonteDir $a2.Ponte -TrabDir $a2.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -Prompt 'x' -TimeoutSeg 60 -EvidenciaDir $a2.Evid -TravaDir $a2.Trava -RazaoDir $a2.Razao
+Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+Checar 'PU-02b: 2a chamada barrada pela trava FINANCEIRA com codigo 28 (preserva a classe)' ($r2b.Codigo -eq 28 -and $r2b.Motivo -match 'trava persistente ativa \(financeira\)') "cod=$($r2b.Codigo) motivo=$($r2b.Motivo)"
 
 "== PU-13 (N-01): executor Low tenta escrever .git/hooks e .git/config -> NEGADO (.git Medium)"
 $b = Novo-Amb $true
@@ -154,6 +159,35 @@ Checar 'PU-12: fluxo OK (teste tratou o erro e saiu 0) -> codigo 0' ($r12.Codigo
 Checar 'PU-12: teste rodou em Low IL (nivel=4096)' ($txt12 -match 'nivel=4096') "t=$txt12"
 Checar 'PU-12: escrita Low em .git (Medium) NEGADA (fronteira de IL)' ($txt12 -match 'git_forj=NEGADO') "t=$txt12"
 Checar 'PU-12: teste.txt NAO forjavel pelo codigo Low (gravado pelo PE em Medium)' (Test-Path $teste12)
+
+"== PU-14 (D-2): fase SOMENTE-TESTE via ponte -> teste roda sob o PE em Low IL (Job novo), escrita Low em .git NEGADA"
+$h14 = Novo-Amb $true
+$tc14 = "try { [IO.File]::WriteAllText((Join-Path (Get-Location) '.git\hooks\ph.txt'),'x'); 'git_hook_teste=OK' } catch { 'git_hook_teste=NEGADO' }"
+$r14 = Invoke-PontePU-V1 -PonteDir $h14.Ponte -TrabDir $h14.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido @{ somente_teste=$true; test_cmd=$tc14; teto_usd=0 } -Prompt '' -TimeoutSeg 60 -EvidenciaDir $h14.Evid -TravaDir $h14.Trava -RazaoDir ''
+$pp14 = Join-Path $h14.Ponte $r14.ExecId; $teste14 = Join-Path $pp14 'teste.txt'
+$txt14 = if (Test-Path $teste14) { Get-Content $teste14 -Raw } else { '' }
+Checar 'PU-14: fase somente-teste concluiu (codigo 0, fim.flag)' ($r14.Codigo -eq 0) "cod=$($r14.Codigo) motivo=$($r14.Motivo)"
+Checar 'PU-14: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU' ($txt14 -match 'nivel=4096') "t=$txt14"
+Checar 'PU-14: escrita Low em .git (Medium) pela via do TESTE -> NEGADA (fecha V1-F02)' ($txt14 -match 'git_hook_teste=NEGADO') "t=$txt14"
+
+"== PU-15 (REQ-04 completo): teste Low NAO escreve em alvo Medium e NAO faz acesso perigoso ao processo supervisor"
+$h15 = Novo-Amb $true
+$alvoMedio = Join-Path $h15.Base 'alvo-medio.txt'   # fora da arvore Low => Medium (herda do pai)
+[System.IO.File]::WriteAllText($alvoMedio, "medio`n", [Text.UTF8Encoding]::new($false))
+$sup = [System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName=$env:ComSpec; Arguments='/c ping -n 30 127.0.0.1 > nul'; UseShellExecute=$false; CreateNoWindow=$true }))
+$supPid = $sup.Id
+$env:B05FAKE_ALVOMEDIO = $alvoMedio; $env:B05FAKE_SUPPID = [string]$supPid
+$tc15 = 'try { [IO.File]::AppendAllText($env:B05FAKE_ALVOMEDIO,"x"); "alvo_medio=OK" } catch { "alvo_medio=NEGADO" }; try { Stop-Process -Id ([int]$env:B05FAKE_SUPPID) -ErrorAction Stop; "kill_sup=OK" } catch { "kill_sup=NEGADO" }'
+$r15 = Invoke-PontePU-V1 -PonteDir $h15.Ponte -TrabDir $h15.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido @{ somente_teste=$true; test_cmd=$tc15; teto_usd=0 } -Prompt '' -TimeoutSeg 60 -EvidenciaDir $h15.Evid -TravaDir $h15.Trava -RazaoDir ''
+Remove-Item Env:B05FAKE_ALVOMEDIO,Env:B05FAKE_SUPPID -EA SilentlyContinue
+$pp15 = Join-Path $h15.Ponte $r15.ExecId; $teste15 = Join-Path $pp15 'teste.txt'
+$txt15 = if (Test-Path $teste15) { Get-Content $teste15 -Raw } else { '' }
+$supVivo = $false; try { $supVivo = -not (Get-Process -Id $supPid -EA Stop).HasExited } catch { $supVivo = $false }
+try { if (-not $sup.HasExited) { $sup.Kill($true) } } catch { }
+Checar 'PU-15: teste em Low IL (nivel=4096)' ($txt15 -match 'nivel=4096') "t=$txt15"
+Checar 'PU-15: escrita Low em alvo MEDIO (ex. teste.txt/pasta-ponte) -> NEGADA' ($txt15 -match 'alvo_medio=NEGADO') "t=$txt15"
+Checar 'PU-15: acesso perigoso ao processo supervisor (Medium) -> NEGADO' ($txt15 -match 'kill_sup=NEGADO') "t=$txt15"
+Checar 'PU-15: supervisor permaneceu vivo (nao foi encerrado pelo teste Low)' ($supVivo)
 
 "`nTOTAL PU: $ok / $tot"
 exit ([int]($ok -ne $tot))

@@ -17,12 +17,18 @@ $Utf8 = [System.Text.UTF8Encoding]::new($false)
 function PU-Icacls([string[]]$a){ & "$env:SystemRoot\System32\icacls.exe" @a *> $null; if ($LASTEXITCODE -ne 0) { throw "icacls falhou ($LASTEXITCODE): $($a -join ' ')" } }
 
 # N-07: trava persistente, leitura FAIL-CLOSED (erro ao listar => considera travado). Qualquer .trava bloqueia.
+# Devolve o TIPO (financeira|seguranca|desconhecido) para o chamador PRESERVAR o codigo correto: financeira=>28,
+# seguranca/desconhecido=>70 (conservador). Corrige a conversao generica de trava financeira em 70 (achado ChatGPT Ato 147).
 function PU-Trava-Ativa([string]$travaDir) {
   if (-not $travaDir) { throw 'N-07: TravaDir obrigatorio' }
-  if (-not (Test-Path -LiteralPath $travaDir)) { return $null }
+  if (-not (Test-Path -LiteralPath $travaDir)) { return @{ Ativa=$false; Tipo=$null; Detalhe='' } }
   try { $t = Get-ChildItem -LiteralPath $travaDir -Filter '*.trava' -ErrorAction Stop | Select-Object -First 1 }
-  catch { return "LEITURA DE TRAVA FALHOU (fail-closed): $($_.Exception.Message)" }
-  if ($t) { return (Get-Content -LiteralPath $t.FullName -Raw) } else { return $null }
+  catch { return @{ Ativa=$true; Tipo='desconhecido'; Detalhe="LEITURA DE TRAVA FALHOU (fail-closed): $($_.Exception.Message)" } }
+  if (-not $t) { return @{ Ativa=$false; Tipo=$null; Detalhe='' } }
+  $raw = ''; $tipo = 'desconhecido'
+  try { $raw = Get-Content -LiteralPath $t.FullName -Raw; $j = $raw | ConvertFrom-Json; if ($j.PSObject.Properties['tipo']) { $tipo = "$($j.tipo)" } } catch { $tipo = 'desconhecido' }
+  if ($tipo -eq 'desconhecido') { if ($t.Name -like 'financeira-*') { $tipo='financeira' } elseif ($t.Name -like 'seguranca-*') { $tipo='seguranca' } }
+  return @{ Ativa=$true; Tipo=$tipo; Detalhe=$raw }
 }
 function PU-Gravar-Trava([string]$travaDir,[string]$tipo,[string]$motivo,[string]$execId) {
   New-Item -ItemType Directory -Force $travaDir | Out-Null
@@ -131,10 +137,16 @@ function Invoke-PontePU-V1 {
     [double]$Folga = 0.25,     # contrato v3.1: reserva = teto * (1+folga)
     [double]$MaxUsd = 0        # admissao B+K+R+T(1+F) <= M; 0 => sem teto de admissao
   )
-  $res = [ordered]@{ Ok=$false; Codigo=70; Saida=''; Erro=''; Violacao=$false; Motivo=''; ExecId=$null; Evidencia=$null }
-  # N-07: trava persistente bloqueia novas chamadas (fail-closed)
+  $res = [ordered]@{ Ok=$false; Codigo=70; Saida=''; Erro=''; Violacao=$false; Motivo=''; ExecId=$null; Evidencia=$null; CustoUsd=0.0; CustoConhecido=$false }
+  # N-07: trava persistente bloqueia novas chamadas (fail-closed). PRESERVA o codigo pela classe da trava:
+  # financeira=>28, seguranca/desconhecido=>70 (D-3/ChatGPT Ato 147: trava financeira nao vira 70 generico).
   $trava = PU-Trava-Ativa $TravaDir
-  if ($trava) { $res.Codigo = 70; $res.Motivo = "trava persistente ativa: $trava"; return $res }
+  if ($trava.Ativa) {
+    $res.Violacao = $true
+    $res.Codigo = if ($trava.Tipo -eq 'financeira') { 28 } else { 70 }
+    $res.Motivo = "trava persistente ativa ($($trava.Tipo)): $($trava.Detalhe)"
+    return $res
+  }
   if (-not $ExecId) { $ExecId = [guid]::NewGuid().ToString('N') }
   $res.ExecId = $ExecId
   # N-08/C6: pre-flight anti-orfao ANTES de qualquer despacho (encerra/confirma orfaos de execucoes anteriores)
@@ -168,7 +180,17 @@ function Invoke-PontePU-V1 {
   $ped = [ordered]@{ exec_id=$ExecId }; foreach ($k in $Pedido.Keys) { $ped[$k] = $Pedido[$k] }
   $ped['pwsh_sha256'] = $PwshSha256; $ped['criado_em'] = (Get-Date).ToString('o')
   [System.IO.File]::WriteAllText((Join-Path $dir 'pedido.json'), ($ped | ConvertTo-Json -Compress), $Utf8)
-  PU-Razao-Inicio $RazaoDir $ExecId $teto   # RESERVA (contabilizada) ANTES do disparo
+  # RESERVA (contabilizada) ANTES do disparo. FAIL-CLOSED (D-3/ChatGPT Ato 147): se nao persistir a reserva, NAO dispara
+  # (sem go.flag; remove a pasta) e bloqueia financeiro 28 - uma execucao nao contabilizada e inaceitavel.
+  if ($RazaoDir) {
+    try { PU-Razao-Inicio $RazaoDir $ExecId $teto }
+    catch {
+      $res.Violacao=$true; $res.Codigo=28; $res.Motivo="REQ-02/fail-closed: falha ao gravar a RESERVA no razao - bloqueio financeiro, sem disparo: $($_.Exception.Message)"
+      try { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue } catch { }
+      try { PU-Gravar-Trava $TravaDir 'financeira' $res.Motivo $ExecId } catch { }
+      return $res
+    }
+  }
   if ($IsWindows) { PU-RotularArvore $TrabDir }   # N-01: Low na arvore, Medium em .git (fail-closed)
   [System.IO.File]::WriteAllText((Join-Path $dir 'go.flag'), '1', $Utf8)
   # Lanca o acao-pe LOCALMENTE (processo comum, execucao unica). N-05: identidade (PID+criacao) OBRIGATORIA.
@@ -232,6 +254,7 @@ function Invoke-PontePU-V1 {
     $std = (Get-Content -LiteralPath (Join-Path $dir 'stdout.json') -Raw -ErrorAction SilentlyContinue)
     $cv = 0.0
     if ($invocou -and (PU-CustoConhecido $std ([ref]$cv))) {
+      $res.CustoUsd = $cv; $res.CustoConhecido = $true   # V1-F04: custo CONHECIDO mesmo em falha de teste -> nao devolver 0 ao controlador
       $res.Motivo = 'D-06(d): falha de teste apos executor (custo conhecido)'; try { PU-Razao-Fim $RazaoDir $ExecId $false $cv 'falha-teste' } catch { }
     } elseif ($invocou) {
       $res.Motivo = 'D-06(c): falha posterior a invocacao, custo desconhecido (reserva mantida)'; try { PU-Razao-Fim $RazaoDir $ExecId $true 0 'posterior-desconhecido' } catch { }
@@ -253,6 +276,7 @@ function Invoke-PontePU-V1 {
   if ($RazaoDir) {
     $cv = 0.0
     if (PU-CustoConhecido $res.Saida ([ref]$cv)) {
+      $res.CustoUsd = $cv; $res.CustoConhecido = $true
       try { PU-Razao-Fim $RazaoDir $ExecId $false $cv 'posterior-conhecido' } catch { }
     } else {
       $res.Violacao=$true; $res.Codigo=28; $res.Motivo='REQ-02: total_cost_usd invalido/ausente no stdout do executor - custo desconhecido, bloqueio financeiro'

@@ -44,9 +44,12 @@ $res = Invoke-PontePU-V1 -PonteDir "$($cfg.ponte_dir)" -TrabDir (Get-Location).P
   -TimeoutSeg $timeout -EvidenciaDir "$($cfg.evidencia_dir)" -TravaDir "$($cfg.trava_dir)" `
   -RazaoDir $dir -Folga $folga -MaxUsd $orc
 
+# V1-F04 (ChatGPT Ato 147): quando o razao tem custo CONHECIDO (ex.: falha de teste apos executor), devolver esse custo
+# ao controlador, nunca 0 - senao o controlador subcontabiliza o gasto ja reconhecido no razao.
+$custoResp = if ($res.CustoConhecido) { [double]$res.CustoUsd } else { 0.0 }
 switch ([int]$res.Codigo) {
   0  { [Console]::Out.Write([string]$res.Saida); if ($res.Erro) { [Console]::Error.Write([string]$res.Erro) }; exit 0 }
-  70 { Sair-Erro ("TRAVA DE SEGURANCA 70 - evidencia em $($res.Evidencia): $($res.Motivo)") 70 }
-  28 { Sair-Erro ("bloqueio financeiro (28): $($res.Motivo)") 28 }
-  default { Sair-Erro ("falha da ponte (codigo $($res.Codigo)): $($res.Motivo)") ([int]$res.Codigo) }
+  70 { Resp "ponte: TRAVA DE SEGURANCA 70 - evidencia em $($res.Evidencia): $($res.Motivo)" $true $custoResp 'error_ponte'; exit 70 }
+  28 { Resp "ponte: bloqueio financeiro (28): $($res.Motivo)" $true $custoResp 'error_ponte'; exit 28 }
+  default { Resp "ponte: falha (codigo $($res.Codigo)): $($res.Motivo)" $true $custoResp 'error_ponte'; exit ([int]$res.Codigo) }
 }
