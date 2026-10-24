@@ -6,7 +6,8 @@
 # editavel pelo PE (I2). Spec: b05/pe/PONTE-PU-SPEC.md (v2). Codigos: 0=ok; 1=falha comum (retry); 28=financeira; 70=seguranca.
 # Correcoes dos Atos 137/138 (Perplexity/ChatGPT): N-01 blindagem de .git (Medium), N-02 recusa de exec_id pre-existente,
 # N-03 conferencia de exec_id no fim.flag, N-04 evidencia robusta + varrer pasta-ponte, N-05 identidade obrigatoria,
-# N-07 TravaDir obrigatorio/fail-closed, N-08 lease persistente (pre-flight/C6 completo e N-06 classificacao: proxima rodada).
+# N-07 TravaDir obrigatorio/fail-closed, N-08 lease+pre-flight anti-orfao/C6, N-06 classificacao de timeout
+# (morte/custo desconhecidos => bloqueio financeiro 28, sem retry; sobrevivente => 70).
 Set-StrictMode -Version 3.0
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot '..\b05job.ps1')             # [B05Job]: Snapshot, Subarvore, Encerrar
@@ -60,6 +61,20 @@ function PU-Encerrar-Subarvore([uint32]$raizPid,[long]$raizCriacao) {
   $m = PU-Subarvore-Morta $raizPid $raizCriacao
   foreach ($linha in $m.Vivos) { $c = $linha -split '\|'; if ($c.Count -ge 4) { try { [void][B05Job]::Encerrar([uint32]$c[0], [long]$c[3]) } catch { } } }
 }
+# N-08/C6: pre-flight anti-orfao. Antes de despachar, encerra qualquer subarvore de execucao anterior registrada em
+# lease (lido fora do repo). Bloqueia (fail-closed) se nao confirmar a morte. Trata a retomada apos morte abrupta do
+# controlador: o novo turno nao avanca (nem deixa o controlador fazer git) enquanto um PE anterior puder escrever.
+function PU-PreFlight-Orfaos([string]$travaDir) {
+  if (-not (Test-Path -LiteralPath $travaDir)) { return @{ Ok=$true; Motivo='' } }
+  foreach ($lf in @(Get-ChildItem -LiteralPath $travaDir -Filter '*.lease' -ErrorAction SilentlyContinue)) {
+    try { $ls = Get-Content -LiteralPath $lf.FullName -Raw | ConvertFrom-Json } catch { return @{ Ok=$false; Motivo="lease ilegivel ($($lf.Name)) - fail-closed" } }
+    $m = PU-Subarvore-Morta ([uint32]$ls.pid) ([long]$ls.criacao)
+    if (-not $m.Morta) { PU-Encerrar-Subarvore ([uint32]$ls.pid) ([long]$ls.criacao); Start-Sleep -Milliseconds 400; $m = PU-Subarvore-Morta ([uint32]$ls.pid) ([long]$ls.criacao) }
+    if (-not $m.Morta) { return @{ Ok=$false; Motivo="orfao de execucao anterior nao encerrado (lease $($ls.exec_id)): $([string]::Join('; ',$m.Vivos))" } }
+    Remove-Item -LiteralPath $lf.FullName -Force -ErrorAction SilentlyContinue
+  }
+  return @{ Ok=$true; Motivo='' }
+}
 
 # N-04: evidencia FORA do repo, SO via robocopy /XJ (nao atravessa junctions), com checagem de codigo; SEM fallback inseguro.
 function PU-Preservar-Evidencia([string]$trabDir,[string]$ponteExecDir,[string]$evidDir,[string]$execId) {
@@ -90,6 +105,9 @@ function Invoke-PontePU-V1 {
   if ($trava) { $res.Codigo = 70; $res.Motivo = "trava persistente ativa: $trava"; return $res }
   if (-not $ExecId) { $ExecId = [guid]::NewGuid().ToString('N') }
   $res.ExecId = $ExecId
+  # N-08/C6: pre-flight anti-orfao ANTES de qualquer despacho (encerra/confirma orfaos de execucoes anteriores)
+  $pf = PU-PreFlight-Orfaos $TravaDir
+  if (-not $pf.Ok) { $res.Codigo=70; $res.Violacao=$true; $res.Motivo="N-08 pre-flight: $($pf.Motivo)"; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
   $dir = Join-Path $PonteDir $ExecId
   # N-02: recusa pasta exec_id pre-existente (NAO apaga, NAO reutiliza)
   if (Test-Path -LiteralPath $dir) {
@@ -112,7 +130,8 @@ function Invoke-PontePU-V1 {
   if ($embCri -le 0) { try { $p.Kill($true) } catch { }; $res.Violacao=$true; $res.Motivo='N-05: nao capturei a identidade (criacao) do embrulho - bloqueado'; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
   PU-Lease-Gravar $TravaDir $ExecId $embPid $embCri   # N-08: lease ANTES de esperar
   # REQ-10: prazo com folga; se estourar, encerra a subarvore (V1). (N-06 classificacao fina = proxima rodada.)
-  if (-not $p.WaitForExit(($TimeoutSeg + 15) * 1000)) { try { $p.Kill($true) } catch { }; try { $p.WaitForExit(10000) | Out-Null } catch { }; $res.Violacao = $true; $res.Motivo = "timeout do PU (> ${TimeoutSeg}s + folga)" }
+  $houveTimeout = $false
+  if (-not $p.WaitForExit(($TimeoutSeg + 15) * 1000)) { try { $p.Kill($true) } catch { }; try { $p.WaitForExit(10000) | Out-Null } catch { }; $houveTimeout = $true }
   # N-03: confirma a morte da SUBARVORE (acao-pe + executor + descendentes)
   Start-Sleep -Milliseconds 300
   $morte = PU-Subarvore-Morta $embPid $embCri
@@ -129,6 +148,14 @@ function Invoke-PontePU-V1 {
     try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }
     PU-Lease-Fechar $TravaDir $ExecId; $res.Codigo = 70; return $res
   }
+  # N-06: timeout com subarvore MORTA e sem violacao => custo DESCONHECIDO (sem fim.flag). Bloqueio FINANCEIRO, SEM retry.
+  if ($houveTimeout) {
+    $res.Violacao=$true; $res.Codigo=28
+    $res.Motivo=("$($res.Motivo) | N-06: timeout com custo desconhecido (sem fim.flag) - bloqueio financeiro, sem retry").Trim(' |')
+    try { $res.Evidencia = PU-Preservar-Evidencia $TrabDir $dir $EvidenciaDir $ExecId } catch { $res.Motivo += " | falha evidencia: $($_.Exception.Message)" }
+    try { PU-Gravar-Trava $TravaDir 'financeira' $res.Motivo $ExecId } catch { }
+    PU-Lease-Fechar $TravaDir $ExecId; return $res
+  }
   PU-Lease-Fechar $TravaDir $ExecId
   # Sem violacao: artefatos confiaveis (PE morto, sem reparse). N-03: confere exec_id no fim.flag.
   if (Test-Path -LiteralPath (Join-Path $dir 'falhou.flag')) { $res.Codigo = 1; $res.Motivo = 'falhou.flag (falha comum)'; $res.Erro = (Get-Content -LiteralPath (Join-Path $dir 'erro-pe.txt') -Raw -ErrorAction SilentlyContinue); return $res }
@@ -139,7 +166,7 @@ function Invoke-PontePU-V1 {
   $res.Erro  = (Get-Content -LiteralPath (Join-Path $dir 'stderr.txt') -Raw -ErrorAction SilentlyContinue)
   $res.Ok = $true; $res.Codigo = 0
   return $res
-  # PENDENTE (proxima rodada): N-06 (classificacao fina de timeout: morte/custo desconhecidos != retry), N-08 completo
-  # (pre-flight anti-orfao lendo leases + cenario C6), REQ-02 (reserva/custo no razao), REQ-04/REQ-12 fase teste
-  # (Job novo, fronteira de IL, despachante P-B com SHA), REQ-08 integracao 2 fases, bateria PU-01..PU-13, copia confiavel do PU.
+  # PENDENTE (rumo ao congelamento): REQ-02 (reserva/custo no razao do PU), REQ-04/REQ-12 fase teste (Job novo,
+  # fronteira de IL, despachante P-B com SHA), REQ-08 integracao 2 fases no claude-com-teto (controlador 7cd7864 diff
+  # vazio), bateria PU-01..PU-13 + regressao C4/C6, copia confiavel do PU (hash/IL), precedencia de R1 (HOLD vs failed).
 }
