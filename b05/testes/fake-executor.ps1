@@ -25,6 +25,21 @@ switch ($tipo) {
     if ($dir) { Set-Content (Join-Path $dir 'fuga-pid.txt') $f.Id -NoNewline }
     Start-Sleep -Seconds 120; Alterar; [ordered]@{ type = 'result'; is_error = $false; result = 'fuga'; total_cost_usd = 0.01 } | ConvertTo-Json -Compress; exit 0 }
   'cru'      { Alterar; [Console]::Out.Write("$env:B05FAKE_SAIDA"); exit 0 }
+  'neto'     {
+    # PE-R4 (determinístico, Ato 122/ChatGPT): executor LEGÍTIMO que gera um processo filho (neto do PE), DENTRO do job
+    # (sem escape artificial). Formato neto:<netoSeg>:<selfSeg>:<exit>. Grava ".\neto-pid.txt" = "<pid>|<ticksUtc>"
+    # (identidade PID+criação). Prova de contenção: após o fim do executor/acao-pe nenhum descendente pode sobreviver
+    # (KILL_ON_JOB_CLOSE em encerramento normal/falha; TerminateJobObject em timeout).
+    $netoSeg, $selfSeg, $rc = ($valor -split ':', 3)
+    if (-not $netoSeg) { $netoSeg = 60 }; if (-not $selfSeg) { $selfSeg = 0 }; if (-not $rc) { $rc = 0 }
+    $psi = [System.Diagnostics.ProcessStartInfo]::new($env:ComSpec)
+    foreach ($x in @('/c', "ping -n $([int]$netoSeg + 1) 127.0.0.1 > nul")) { $psi.ArgumentList.Add($x) }
+    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $f = [System.Diagnostics.Process]::Start($psi)
+    Set-Content (Join-Path (Get-Location) 'neto-pid.txt') ("$($f.Id)|$($f.StartTime.ToUniversalTime().Ticks)") -NoNewline
+    if ([int]$selfSeg -gt 0) { Start-Sleep -Seconds ([int]$selfSeg) }
+    Alterar; [ordered]@{ type = 'result'; is_error = ([int]$rc -ne 0); result = 'neto'; total_cost_usd = 0.05 } | ConvertTo-Json -Compress
+    exit ([int]$rc) }
   'junction' {
     # N18c: planta uma junction na árvore de trabalho (baixa) apontando para uma pasta MÉDIA, para desviar uma escrita
     # média que a atravesse. A varredura de reparse points do embrulho deve fechar a execução.

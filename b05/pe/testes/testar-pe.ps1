@@ -112,6 +112,37 @@ if ($IsWindows) {
   "== PE-R3 (real, PE-F02): `$TestCmd roda sob o PE em Low IL (nivel 4096)"
   $r3 = Nova-Execucao 'ok:0.10' 'Write-Output ok; exit 0'; $env:B05FAKE_MODO='ok:0.10'; $cr3 = Real $r3; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
   Checar 'PE-R3: teste.txt com nivel=4096 (teste em Low IL)' ((Test-Path (Join-Path $r3.Dir 'teste.txt')) -and ((Get-Content (Join-Path $r3.Dir 'teste.txt') -Raw) -match 'nivel=4096')) "t=$(if(Test-Path (Join-Path $r3.Dir 'teste.txt')){Get-Content (Join-Path $r3.Dir 'teste.txt') -Raw})"
+
+  # PE-R4 (Ato 122 / PE-F03): rejeicao de processo sobrevivente = ausencia de orfaos apos encerramento normal/falha/timeout.
+  # Determinstico (ChatGPT): executor legitimo gera um neto DENTRO do job; prova por identidade PID+criacao que o neto
+  # NAO sobrevive ao fim do acao-pe. fim.flag NAO e aceito como prova de termino (a morte do neto e checada externamente).
+  function NetoVivo($trab,[ref]$pidOut) {
+    $pidOut.Value = 0
+    $f = Join-Path $trab 'neto-pid.txt'; if (-not (Test-Path $f)) { return $null }   # null = sem registro (falha de setup)
+    if ((Get-Content $f -Raw) -notmatch '^(\d+)\|(\d+)$') { return $null }
+    $np = [int]$Matches[1]; $nt = [long]$Matches[2]; $pidOut.Value = $np
+    Start-Sleep -Seconds 2
+    $pp = Get-Process -Id $np -ErrorAction SilentlyContinue
+    return ($pp -and $pp.StartTime.ToUniversalTime().Ticks -eq $nt)   # $true = MESMO processo ainda vivo (orfao)
+  }
+
+  "== PE-R4a (real): sem orfao apos encerramento NORMAL (neto no job morre com KILL_ON_JOB_CLOSE)"
+  $r4 = Nova-Execucao 'neto:60:0:0'; $env:B05FAKE_MODO='neto:60:0:0'; $cr4 = Real $r4; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+  Checar 'PE-R4a: acao-pe saiu 0 e fim.flag existe' ($cr4 -eq 0 -and (Test-Path (Join-Path $r4.Dir 'fim.flag'))) "codigo $cr4"
+  $p4 = 0; $v4 = NetoVivo $r4.Trab ([ref]$p4)
+  Checar 'PE-R4a: neto (PID+criacao) NAO sobrevive ao encerramento normal' ($p4 -gt 0 -and $v4 -eq $false) "netoPid=$p4 vivo=$v4"
+
+  "== PE-R4b (real): sem orfao apos TIMEOUT (TerminateJobObject mata toda a arvore)"
+  $r5 = Nova-Execucao 'neto:60:20:0'; $env:B05FAKE_MODO='neto:60:20:0'; $cr5 = Real $r5 3; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+  Checar 'PE-R4b: timeout -> falhou.flag, sem fim.flag' ((Test-Path (Join-Path $r5.Dir 'falhou.flag')) -and -not (Test-Path (Join-Path $r5.Dir 'fim.flag')))
+  $p5 = 0; $v5 = NetoVivo $r5.Trab ([ref]$p5)
+  Checar 'PE-R4b: neto NAO sobrevive ao timeout' ($p5 -gt 0 -and $v5 -eq $false) "netoPid=$p5 vivo=$v5"
+
+  "== PE-R4c (real): sem orfao apos FALHA do executor (exit!=0), codigo preservado"
+  $r6 = Nova-Execucao 'neto:60:0:7'; $env:B05FAKE_MODO='neto:60:0:7'; $cr6 = Real $r6; Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+  Checar 'PE-R4c: exit.code preserva 7 e fim.flag existe' ((Test-Path (Join-Path $r6.Dir 'exit.code')) -and ((Get-Content (Join-Path $r6.Dir 'exit.code') -Raw).Trim() -eq '7') -and (Test-Path (Join-Path $r6.Dir 'fim.flag')))
+  $p6 = 0; $v6 = NetoVivo $r6.Trab ([ref]$p6)
+  Checar 'PE-R4c: neto NAO sobrevive a falha do executor' ($p6 -gt 0 -and $v6 -eq $false) "netoPid=$p6 vivo=$v6"
 }
 
 "`nTOTAL PE: $ok / $tot"
