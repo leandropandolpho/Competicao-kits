@@ -104,4 +104,34 @@ nao importa nada da arvore de trabalho. Reforca I2.
 - Sondas N1-N17 sob dois principais Windows efetivamente separados.
 
 ## 8. Pacote de auditoria exigido ao fim da V1 (Ato 134)
-Commit + hashes dos arquivos sob teste; provas negativas (PU-02..PU-12); diffs; e pendencias explicitas da V2.
+Commit + hashes dos arquivos sob teste; provas negativas (PU-02..PU-13); diffs; e pendencias explicitas da V2.
+Cada teste negativo COMPROVA a tentativa (comando/operacao, PID, identidade, IL quando aplicavel, resultado e o erro
+efetivo devolvido pelo Windows). Verde sem tentativa comprovada NAO e aprovacao. A V1 nao e declarada apta so por
+bateria verde: exige reconciliacao de evidencias e objecoes materiais (decisao tecnica fundamentada apta/nao-apta).
+
+## 9. Emendas dos Atos 141-144 (arbitragem ChatGPT 144)
+- C-01 (resolvido): NAO ha conflito N-06/N-08 x C6 na V1 — ao matar a arvore do controlador, a ponte morre antes de
+  gravar a trava 28; sobra o lease, e o pre-flight confirma a morte, apaga o lease e segue. PROVAR no C6/PU-11. NAO
+  converter reserva em custo conhecido: o razao preserva a distincao custo-conhecido vs reserva-pendente (b05/razao.ps1).
+- R-01 (ALTO na V2; PU-11b): o controlador congelado faz rollback (git reset/clean) ANTES de chamar a ponte; um PE
+  sobrevivente (V2, tarefa agendada, fora da arvore) poderia escrever apos o rollback e antes do pre-flight da ponte.
+  Solucao: GUARDA de pre-inicializacao SEPARADO e confiavel, EXTERNO ao B-05, executado ANTES do lancador/controlador,
+  com intertravamento e sem contorno — NAO modificar lancador.ps1 (congelado). Bloqueante da V2; prova por PU-11b
+  (PE anterior vivo -> a inicializacao e impedida antes do controlador e de qualquer rollback). Na V1, demonstrar que o
+  C6 encerra toda a arvore e nao ha escrita apos o rollback.
+- R-02 (feito): listagem de leases do pre-flight e FAIL-CLOSED (erro ao listar bloqueia).
+- R-03 (feito): identidade do embrulho por criacao em FILETIME do HANDLE (CriacaoUtc) + snapshot autoritativo
+  (NtQuerySystemInformation) com cross-check; ausente/divergente/inconclusiva => bloqueio.
+- C-02: violacao 70 aparece como `failed` (exit 1) no controlador congelado (ele repete tentativas, todas barradas pela
+  trava). A notificacao e o relatorio final DEVEM dizer "TRAVA DE SEGURANCA 70 — evidencia em <pasta>"; linha propria
+  na matriz, distinguindo o estado externo do controlador do motivo interno de seguranca e eventual precedencia de R1.
+- C-03: a regressao C4 preserva o resultado da baseline (exit 1, T1 failed, HEAD=base, arvore limpa); qualquer
+  divergencia e declarada/justificada na matriz.
+- D-06 (REQ-02, classificacao financeira por FASE): eliminar a equivalencia generica falhou.flag / sem-marcadores /
+  falha-comum-com-retry. Classificar: (a) anterior a invocacao; (b) posterior com custo CONHECIDO; (c) posterior com
+  custo DESCONHECIDO; (d) falha exclusivamente de teste. Custo desconhecido NAO vira zero nem autoriza nova invocacao
+  sem reconciliacao/admissao suficientes; reserva pendente permanece contabilizada (sem virar gasto conhecido).
+- R1/REQ-11: a trava impede novo despacho e preserva evidencia; o estado final pode ser HOLD (exit 2) quando houver
+  gatilho R1 concomitante, em vez de failed — respeitar a precedencia do controlador congelado.
+- Copia confiavel do PU: a copia da ponte e do despachante executada pelo PU fica fora da arvore editavel pelo PE
+  (ACL/IL efetivas) com SHA-256 conferido; o fonte no GitHub nao substitui a protecao em runtime.

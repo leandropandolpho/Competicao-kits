@@ -66,7 +66,9 @@ function PU-Encerrar-Subarvore([uint32]$raizPid,[long]$raizCriacao) {
 # controlador: o novo turno nao avanca (nem deixa o controlador fazer git) enquanto um PE anterior puder escrever.
 function PU-PreFlight-Orfaos([string]$travaDir) {
   if (-not (Test-Path -LiteralPath $travaDir)) { return @{ Ok=$true; Motivo='' } }
-  foreach ($lf in @(Get-ChildItem -LiteralPath $travaDir -Filter '*.lease' -ErrorAction SilentlyContinue)) {
+  try { $leases = @(Get-ChildItem -LiteralPath $travaDir -Filter '*.lease' -ErrorAction Stop) }   # R-02: fail-closed
+  catch { return @{ Ok=$false; Motivo="R-02: listagem de leases falhou (fail-closed): $($_.Exception.Message)" } }
+  foreach ($lf in $leases) {
     try { $ls = Get-Content -LiteralPath $lf.FullName -Raw | ConvertFrom-Json } catch { return @{ Ok=$false; Motivo="lease ilegivel ($($lf.Name)) - fail-closed" } }
     $m = PU-Subarvore-Morta ([uint32]$ls.pid) ([long]$ls.criacao)
     if (-not $m.Morta) { PU-Encerrar-Subarvore ([uint32]$ls.pid) ([long]$ls.criacao); Start-Sleep -Milliseconds 400; $m = PU-Subarvore-Morta ([uint32]$ls.pid) ([long]$ls.criacao) }
@@ -126,8 +128,14 @@ function Invoke-PontePU-V1 {
   foreach ($a in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$AcaoPs1,'-PonteDir',$PonteDir,'-PwshAprovado',$PwshAprovado,'-PwshSha256',$PwshSha256,'-TimeoutSeg',[string]$TimeoutSeg)) { $psi.ArgumentList.Add($a) }
   $psi.UseShellExecute = $false; $psi.WorkingDirectory = $TrabDir; $psi.CreateNoWindow = $true
   $p = [System.Diagnostics.Process]::Start($psi)
-  $embPid = [uint32]$p.Id; $embCri = 0L; try { $embCri = $p.StartTime.ToFileTimeUtc() } catch { }
-  if ($embCri -le 0) { try { $p.Kill($true) } catch { }; $res.Violacao=$true; $res.Motivo='N-05: nao capturei a identidade (criacao) do embrulho - bloqueado'; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
+  # N-05/R-03: identidade (PID+criacao) OBRIGATORIA. Criacao em FILETIME do HANDLE (sem conversao local->UTC), com o
+  # snapshot (NtQuerySystemInformation) como fonte autoritativa (consistente com Subarvore) e cross-check. Divergente/ausente => bloqueio.
+  $embPid = [uint32]$p.Id
+  $criH = 0L; try { $criH = [B05LowIL]::CriacaoUtc($p.Handle) } catch { }
+  $snap0 = $null; try { $snap0 = [B05Job]::Snapshot() } catch { }
+  if (-not $snap0 -or -not $snap0.ContainsKey($embPid)) { try { $p.Kill($true) } catch { }; $res.Violacao=$true; $res.Motivo='N-05/R-03: embrulho ausente no snapshot - bloqueado'; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
+  $embCri = [long]$snap0[$embPid].Criacao
+  if ($embCri -le 0 -or ($criH -gt 0 -and $criH -ne $embCri)) { try { $p.Kill($true) } catch { }; $res.Violacao=$true; $res.Motivo="N-05/R-03: identidade divergente/inconclusiva (handle=$criH snapshot=$embCri) - bloqueado"; try { PU-Gravar-Trava $TravaDir 'seguranca' $res.Motivo $ExecId } catch { }; return $res }
   PU-Lease-Gravar $TravaDir $ExecId $embPid $embCri   # N-08: lease ANTES de esperar
   # REQ-10: prazo com folga; se estourar, encerra a subarvore (V1). (N-06 classificacao fina = proxima rodada.)
   $houveTimeout = $false
