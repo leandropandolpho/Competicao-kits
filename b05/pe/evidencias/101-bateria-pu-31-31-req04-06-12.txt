@@ -1,0 +1,54 @@
+== JOB 101 - bateria PU (REQ-02 + REQ-04/06/12), arvore isolada ==
+quando: 2026-10-24 17:25:41  pwsh=True
+
+SHA testar-ponte-pu.ps1 (fonte da verdade no notebook): E9A7B4BB861B7A590BB25DD6FDA8B9584F081E778417335D6CEDAF618A9067F5
+SHA ponte-pu.ps1: CEF8A13F3A587A240584C98AB8DC807956F76FE13BF292D37ADF81CB5A958A46
+SHA acao-pe.ps1:  0A1B570FC11426159B7F9B4857613CE843D7776D2DA55BD605A5685B950FC4A7
+SHA fake-executor.ps1: 3EE1DB213CCEEB54A7274F64DF5BB797B8AF9920BA9558422723CDA76964F3B8
+
+== bateria PU ==
+== PU-01: fluxo feliz (executor ok) -> codigo 0, stdout, subarvore morta, sem trava, razao reconciliado (REQ-02)
+[ok] PU-01: codigo 0 e Ok
+[ok] PU-01: stdout com result do executor
+[ok] PU-01: sem violacao e sem trava
+[ok] PU-01: razao com reserva (inicio teto=0.5)
+[ok] PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)
+== PU-02 (REQ-02): executor reporta total_cost_usd INVALIDO (texto) -> custo desconhecido -> 28 + trava financeira
+[ok] PU-02: custo invalido -> codigo 28, violacao
+[ok] PU-02: trava FINANCEIRA gravada
+[ok] PU-02: razao fim custo_desconhecido (nao vira zero, D-06 c)
+[ok] PU-02: evidencia bruta preservada fora do repo
+== PU-13 (N-01): executor Low tenta escrever .git/hooks e .git/config -> NEGADO (.git Medium)
+[ok] PU-13: executor rodou e gravou ataque.txt
+[ok] PU-13: git_hook NEGADO (.git Medium barra Low)
+[ok] PU-13: git_config NEGADO
+== PU-03 (N-02): pasta exec_id pre-existente -> recusa (70), nao despacha
+[ok] PU-03: recusou exec_id pre-existente (codigo 70, violacao)
+[ok] PU-03: nao reutilizou/apagou (residuo fim.flag intacto)
+== PU-07 (reparse): junction na arvore, embrulho NAO varre -> varredura do PU pos-morte -> 70
+[ok] PU-07: reparse detectado -> codigo 70, violacao
+[ok] PU-07: evidencia preservada fora do repo
+[ok] PU-07: trava de seguranca gravada
+== PU-04 (sobrevivente): acao nao-contida deixa neto vivo -> REQ-03 do PU detecta -> 70 + evidencia + trava
+[ok] PU-04: sobrevivente -> codigo 70, violacao
+[ok] PU-04: evidencia preservada
+== PU-10: apos a violacao (PU-04), a 2a chamada e BARRADA pela trava (sem despachar)
+[ok] PU-10: 2a chamada barrada pela trava (codigo 70, motivo=trava)
+== PU-08 (N-06): acao que trava -> timeout do PU, subarvore morta, sem fim.flag -> 28 (financeiro), sem retry
+[ok] PU-08: timeout do PU -> codigo 28 (financeiro), violacao
+[ok] PU-08: trava FINANCEIRA gravada
+== PU-05 (REQ-06/D-06 d): executor OK (custo conhecido) mas teste REPROVA -> falhou.flag por execucao, custo conhecido, retry com exec_id novo
+[ok] PU-05: teste reprovado -> codigo 1 (falha comum, nao violacao)
+[ok] PU-05: classificado D-06(d) falha de teste
+[ok] PU-05: teste.txt registrou reprovacao (codigo=3)
+[ok] PU-05: razao fim custo CONHECIDO (executor rodou, 0.20; nao desconhecido)
+[ok] PU-05: 2a tentativa (exec_id novo) NAO barrada -> executa (codigo 0)
+== PU-12 (REQ-04/S-03): o codigo do TESTE roda em Low IL e NAO escreve em alvo Medium (.git) -> NEGADO (fronteira de IL)
+[ok] PU-12: fluxo OK (teste tratou o erro e saiu 0) -> codigo 0
+[ok] PU-12: teste rodou em Low IL (nivel=4096)
+[ok] PU-12: escrita Low em .git (Medium) NEGADA (fronteira de IL)
+[ok] PU-12: teste.txt NAO forjavel pelo codigo Low (gravado pelo PE em Medium)
+
+TOTAL PU: 31 / 31
+
+== EXITCODE PU: 0 ==

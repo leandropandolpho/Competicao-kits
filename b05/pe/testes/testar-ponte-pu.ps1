@@ -30,7 +30,7 @@ function Eventos-Razao($amb) {
   if (-not (Test-Path $arq)) { return @() }
   @(Get-Content $arq | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
 }
-function Ped([string]$modo){ return @{ executor=$PwshAprovado; executor_prefixo=("-NoProfile|-File|$fake"); test_cmd=''; teto_usd=0.5 } }
+function Ped([string]$testCmd=''){ return @{ executor=$PwshAprovado; executor_prefixo=("-NoProfile|-File|$fake"); test_cmd=$testCmd; teto_usd=0.5 } }
 
 if (-not $IsWindows) { "PU-SUITE: so roda no Windows (usa [B05Job]/icacls/processos reais)."; exit 0 }
 
@@ -126,6 +126,34 @@ $g = Novo-Amb
 $r8 = Invoke-PontePU-V1 -PonteDir $g.Ponte -TrabDir $g.Trab -AcaoPs1 $fakeAcaoHang -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -TimeoutSeg 3 -EvidenciaDir $g.Evid -TravaDir $g.Trava
 Checar 'PU-08: timeout do PU -> codigo 28 (financeiro), violacao' ($r8.Codigo -eq 28 -and $r8.Violacao) "cod=$($r8.Codigo) motivo=$($r8.Motivo)"
 Checar 'PU-08: trava FINANCEIRA gravada' ([bool](Get-ChildItem $g.Trava -Filter 'financeira-*.trava' -EA SilentlyContinue))
+
+"== PU-05 (REQ-06/D-06 d): executor OK (custo conhecido) mas teste REPROVA -> falhou.flag por execucao, custo conhecido, retry com exec_id novo"
+$h5 = Novo-Amb
+$env:B05FAKE_MODO = 'ok:0.20'
+$r5 = Invoke-PontePU-V1 -PonteDir $h5.Ponte -TrabDir $h5.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped 'exit 3') -Prompt 'x' -TimeoutSeg 60 -EvidenciaDir $h5.Evid -TravaDir $h5.Trava -RazaoDir $h5.Razao
+$pp5 = Join-Path $h5.Ponte $r5.ExecId; $teste5 = Join-Path $pp5 'teste.txt'
+$ev5 = Eventos-Razao $h5; $fim5 = @($ev5 | Where-Object { $_.evento -eq 'fim' -and "$($_.id)" -eq $r5.ExecId })
+Checar 'PU-05: teste reprovado -> codigo 1 (falha comum, nao violacao)' ($r5.Codigo -eq 1 -and -not $r5.Violacao) "cod=$($r5.Codigo) motivo=$($r5.Motivo)"
+Checar 'PU-05: classificado D-06(d) falha de teste' ($r5.Motivo -match 'falha de teste')
+Checar 'PU-05: teste.txt registrou reprovacao (codigo=3)' ((Test-Path $teste5) -and ((Get-Content $teste5 -Raw) -match 'codigo=3'))
+Checar 'PU-05: razao fim custo CONHECIDO (executor rodou, 0.20; nao desconhecido)' ($fim5.Count -eq 1 -and -not $fim5[0].PSObject.Properties['custo_desconhecido'] -and [double]$fim5[0].custo_usd -eq 0.20) "fim=$($fim5.Count)"
+# REQ-06: falha de teste NAO grava trava; a 2a tentativa (exec_id NOVO) despacha normalmente
+$r5b = Invoke-PontePU-V1 -PonteDir $h5.Ponte -TrabDir $h5.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -Prompt 'x' -TimeoutSeg 60 -EvidenciaDir $h5.Evid -TravaDir $h5.Trava -RazaoDir $h5.Razao
+Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+Checar 'PU-05: 2a tentativa (exec_id novo) NAO barrada -> executa (codigo 0)' ($r5b.Codigo -eq 0 -and $r5b.ExecId -ne $r5.ExecId) "cod=$($r5b.Codigo)"
+
+"== PU-12 (REQ-04/S-03): o codigo do TESTE roda em Low IL e NAO escreve em alvo Medium (.git) -> NEGADO (fronteira de IL)"
+$h12 = Novo-Amb $true
+$env:B05FAKE_MODO = 'ok:0.15'
+$tcmd = "try { [IO.File]::WriteAllText((Join-Path (Get-Location) '.git\forj.txt'),'x'); 'git_forj=OK' } catch { 'git_forj=NEGADO' }"
+$r12 = Invoke-PontePU-V1 -PonteDir $h12.Ponte -TrabDir $h12.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped $tcmd) -Prompt 'x' -TimeoutSeg 60 -EvidenciaDir $h12.Evid -TravaDir $h12.Trava -RazaoDir $h12.Razao
+Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
+$pp12 = Join-Path $h12.Ponte $r12.ExecId; $teste12 = Join-Path $pp12 'teste.txt'
+$txt12 = if (Test-Path $teste12) { Get-Content $teste12 -Raw } else { '' }
+Checar 'PU-12: fluxo OK (teste tratou o erro e saiu 0) -> codigo 0' ($r12.Codigo -eq 0) "cod=$($r12.Codigo) motivo=$($r12.Motivo)"
+Checar 'PU-12: teste rodou em Low IL (nivel=4096)' ($txt12 -match 'nivel=4096') "t=$txt12"
+Checar 'PU-12: escrita Low em .git (Medium) NEGADA (fronteira de IL)' ($txt12 -match 'git_forj=NEGADO') "t=$txt12"
+Checar 'PU-12: teste.txt NAO forjavel pelo codigo Low (gravado pelo PE em Medium)' (Test-Path $teste12)
 
 "`nTOTAL PU: $ok / $tot"
 exit ([int]($ok -ne $tot))
