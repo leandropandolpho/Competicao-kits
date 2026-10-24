@@ -1,0 +1,33 @@
+== JOB 103 - integracao REQ-08 (claude-ponte / modo principal-isolado) ==
+quando: 2026-10-24 17:38:48  pwsh=True  git=True
+
+SHA testar-integra-ponte.ps1: 4C2CE531E33C246841DA4CEE2F54EAB80EC523B8A668A70DD007DAB6D0F3C8AD
+SHA claude-ponte.ps1: 7A458FA4615CFD2DC94386567C81C2A3EB5617469E650CC54B5DB52BB2AE4DEC
+SHA ponte-pu.ps1: CEF8A13F3A587A240584C98AB8DC807956F76FE13BF292D37ADF81CB5A958A46
+
+== bateria integracao ==
+== PU-09 (REQ-08): a ponte e EXTERNA ao controlador e ao claude-com-teto (nao os referencia) ==
+[ok] PU-09: claude-ponte (codigo) NAO carrega/invoca controlador.ps1
+[ok] PU-09: claude-ponte (codigo) NAO carrega/invoca claude-com-teto
+  (diff git verificado no container - arvore isolada do notebook nao tem o repo do projeto)
+== C1 (REQ-08): fluxo feliz pela ponte -> executor edita a arvore, custo reconciliado, commit
+warning: in the working copy of 'codigo.txt', LF will be replaced by CRLF the next time Git touches it
+[ok] C1: claude-ponte saiu 0
+[ok] C1: controlador comitou (HEAD avancou)
+[ok] C1: executor editou a arvore (notas.txt commitado)
+[ok] C1: razao reconciliado (fim custo_usd=0.20 conhecido)
+== C4 (REQ-08/C-02/C-03): custo invalido pela ponte -> erro 28 -> rollback (HEAD=base, arvore limpa), trava financeira
+warning: in the working copy of 'codigo.txt', LF will be replaced by CRLF the next time Git touches it
+[ok] C4: claude-ponte devolveu 28 (financeiro)
+[ok] C4: NAO comitou; HEAD=base (rollback)
+[ok] C4: arvore limpa apos rollback (C-03)
+[ok] C4: trava FINANCEIRA gravada (C-02)
+== C6 (REQ-12/R-01 V1): PE orfao VIVO de execucao anterior -> pre-flight da ponte encerra ANTES de despachar
+warning: in the working copy of 'codigo.txt', LF will be replaced by CRLF the next time Git touches it
+[ok] C6: orfao estava VIVO antes da chamada
+[ok] C6: pre-flight encerrou o orfao (morto depois)
+[ok] C6: chamada subsequente prosseguiu (claude-ponte 0)
+
+TOTAL INTEGRA: 13 / 13
+
+== EXITCODE integra: 0 ==

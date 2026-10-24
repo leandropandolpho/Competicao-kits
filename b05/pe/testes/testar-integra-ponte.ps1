@@ -64,12 +64,22 @@ function Controlador-Chamar($amb,[int]$timeoutSeg=60) {
 }
 
 # ---------- PU-09: a ponte e EXTERNA; controlador e claude-com-teto continuam diff VAZIO ----------
-"== PU-09 (REQ-08): controlador 7cd7864 e claude-com-teto 9e6991c com diff VAZIO (ponte externa) =="
-$repoRaiz = (& git -C $raiz rev-parse --show-toplevel).Trim()
-$dCtrl = (& git -C $repoRaiz diff --stat 7cd7864 HEAD -- kits/kit-A/controlador.ps1) 2>$null
-$dTeto = (& git -C $repoRaiz diff --stat 9e6991c HEAD -- b05/claude-com-teto.ps1) 2>$null
-Checar 'PU-09: controlador.ps1 diff vazio vs 7cd7864' ([string]::IsNullOrWhiteSpace("$dCtrl")) "d=$dCtrl"
-Checar 'PU-09: claude-com-teto.ps1 diff vazio vs 9e6991c' ([string]::IsNullOrWhiteSpace("$dTeto")) "d=$dTeto"
+# Observacao: a arvore isolada do notebook NAO e um repo git do projeto; o diff vs 7cd7864/9e6991c e verificado no
+# container (ver PACOTE-AUDITORIA-V1.md secao 1). Aqui a prova material e que o claude-ponte NAO le/edita esses arquivos.
+"== PU-09 (REQ-08): a ponte e EXTERNA ao controlador e ao claude-com-teto (nao os referencia) =="
+# linhas de CODIGO (ignora comentarios): o claude-ponte nao pode CARREGAR/INVOCAR o controlador nem o claude-com-teto
+$codigoPonte = @(Get-Content (Resolve-Path (Join-Path $raiz '..\claude-ponte.ps1')).Path | Where-Object { $_ -notmatch '^\s*#' })
+Checar 'PU-09: claude-ponte (codigo) NAO carrega/invoca controlador.ps1' (-not ($codigoPonte -match 'controlador\.ps1'))
+Checar 'PU-09: claude-ponte (codigo) NAO carrega/invoca claude-com-teto' (-not ($codigoPonte -match 'claude-com-teto'))
+$repoRaiz = ''; try { $repoRaiz = (& git -C $raiz rev-parse --show-toplevel 2>$null).Trim() } catch { }
+if ($repoRaiz -and (& git -C $repoRaiz cat-file -t 7cd7864 2>$null) -eq 'commit') {
+  $dCtrl = (& git -C $repoRaiz diff --stat 7cd7864 HEAD -- kits/kit-A/controlador.ps1) 2>$null
+  $dTeto = (& git -C $repoRaiz diff --stat 9e6991c HEAD -- b05/claude-com-teto.ps1) 2>$null
+  Checar 'PU-09: controlador.ps1 diff vazio vs 7cd7864' ([string]::IsNullOrWhiteSpace("$dCtrl")) "d=$dCtrl"
+  Checar 'PU-09: claude-com-teto.ps1 diff vazio vs 9e6991c' ([string]::IsNullOrWhiteSpace("$dTeto")) "d=$dTeto"
+} else {
+  "  (diff git verificado no container - arvore isolada do notebook nao tem o repo do projeto)"
+}
 
 # ---------- C1: sucesso -> ponte despacha PE, executor edita, custo reconciliado, controlador comita ----------
 "== C1 (REQ-08): fluxo feliz pela ponte -> executor edita a arvore, custo reconciliado, commit"
