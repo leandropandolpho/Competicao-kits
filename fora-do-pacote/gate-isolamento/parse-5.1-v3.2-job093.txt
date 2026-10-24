@@ -1,0 +1,12 @@
+== JOB 093 - parse v3.2 (5.1 + 7) 2026-10-24T15:29:44.4032895-04:00 ==
+ps51=C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe (existe=True)  pwsh7=C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe (existe=True)
+
+--- desfazer-exec-piloto-v3.2.ps1  SHA256=82E57245271BA7FC69C76403DD36E7A0F38E2366A99D1094113BD9F887EBD8FC  nao-ASCII=0
+  Desktop 5.1: erros=0
+  Core 7: erros=0
+
+--- roteiro-admin-exec-piloto-v3.2.ps1  SHA256=66449B0BA248A32E9855677A5BEE8FF7FFD9A1488841C52A305BDF38AB3FE3CE  nao-ASCII=0
+  Desktop 5.1: erros=0
+  Core 7: erros=0
+
+== FIM ==
