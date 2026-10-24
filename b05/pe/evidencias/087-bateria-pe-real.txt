@@ -1,0 +1,48 @@
+== JOB 087 - bateria PE ampliada (pos fix if-hashtable) (gate-pe @ 4348a71, arvore isolada) ==
+quando: 2026-10-24 13:22:36
+pwsh: C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe (existe=True)
+
+== SHA-256 dos arquivos sob teste (conferir com origin/gate-pe) ==
+  C84D41969DE097F9EA04D9C11C6E126651E22C89CFD2A735439EB6CCA525D0FA  b05\b05job.ps1
+  AA78AEA299C7FEF91FED6F5814AFFB8211B11BF8737DBCD27DE05C61F22C1224  b05\baixa-integridade.ps1
+  5B002F79A76DB8027785D17766F15D6F1E4BD046B11AA3CFC5963F0D99618AB5  b05\pe\acao-pe.ps1
+  5F6E38D9E35AC2F35530C24A413E01FAF113A851A82903C16280F42FC9804DF6  b05\pe\testes\testar-pe.ps1
+  7397D9B804A0F958E6A685321634F9DA0B7A86762102F1EFB0A439E2CD0D7771  b05\testes\fake-executor.ps1
+
+testar-pe: C:\Users\piloto\piloto\gate-pe-083\b05\pe\testes\testar-pe.ps1 (existe=True)
+
+== bateria (pwsh 7.6.7) ==
+== PE-S1: execucao normal (ok:0.30) -> stdout.json/exit.code/fim.flag, em_job verdadeiro, sem razao
+[ok] PE-S1: acao-pe saiu 0
+[ok] PE-S1: stdout.json existe
+[ok] PE-S1: exit.code existe
+[ok] PE-S1: fim.flag existe
+[ok] PE-S1: stdout tem result do executor
+[ok] PE-S1: custo 0.30 preservado na saida bruta
+[ok] PE-S1: em_job verdadeiro (contido pelo Job herdado)
+[ok] PE-S1: PE nao gravou razao nem TAREFAS (nenhum fora da pasta-ponte)
+== PE-S2:  roda sob o PE DEPOIS do executor (teste.txt com codigo)
+[ok] PE-S2: teste.txt existe
+[ok] PE-S2: teste rodou sob o PE e saiu 0
+== PE-S3: ADM-V5-02 - pwsh com SHA errado -> falha fechada (nao roda)
+[ok] PE-S3: SHA divergente bloqueia (codigo != 0, sem fim.flag)
+== PE-S4: timeout mata o job (dorme > timeout) -> acao-pe falha, sem fim.flag
+[ok] PE-S4: timeout bloqueia (codigo != 0, sem fim.flag)
+== PE-S5 (PE-F05): falha vira estado terminal (falhou.flag) e NAO e reselecionada
+[ok] PE-S5: falhou.flag gravado (terminal)
+[ok] PE-S5: sem fim.flag
+[ok] PE-S5: 2a passada nao reprocessa a falha (nenhuma pendente)
+== PE-R1 (real): executor em Low IL -> nivel_il 4096, em_job, fim.flag
+[ok] PE-R1: acao-pe saiu 0
+[ok] PE-R1: fim.flag existe
+[ok] PE-R1: executor em nivel 4096 (Low IL real)
+[ok] PE-R1: em_job verdadeiro
+== PE-R2 (real, PE-F01): timeout real -> EsperarSinal detecta, falhou.flag, SEM fim.flag (acao-pe sobrevive)
+[ok] PE-R2: timeout real -> falhou.flag (terminal)
+[ok] PE-R2: sem fim.flag
+== PE-R3 (real, PE-F02): $TestCmd roda sob o PE em Low IL (nivel 4096)
+[ok] PE-R3: teste.txt com nivel=4096 (teste em Low IL)
+
+TOTAL PE: 22 / 22
+
+== EXITCODE bateria: 0 ==
