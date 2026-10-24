@@ -23,6 +23,7 @@ public static class B05LowIL {
   [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint a, bool h, int pid);
   [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr h, uint ms);
   [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr h, out uint c);
+  [DllImport("kernel32.dll")] static extern uint ResumeThread(IntPtr h);
   [DllImport("kernel32.dll")] static extern bool GetProcessTimes(IntPtr h, out long c, out long x, out long k, out long u);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr h, uint c);
@@ -98,6 +99,17 @@ public static class B05LowIL {
     if (!CreateProcessAsUserW(token, null, new StringBuilder(cmdline), IntPtr.Zero, IntPtr.Zero, false, flags, env, cwd, ref s, out pi)) return "CreateProcessAsUser " + Marshal.GetLastWin32Error();
     pid = pi.pid; hProc = pi.hp; CloseHandle(pi.ht); return "";
   }
+  // PE-F07: cria o processo SUSPENSO (CREATE_SUSPENDED) e devolve tambem o handle da thread. O chamador associa ao Job,
+  // confere em_job e SO ENTAO chama Retomar() — nenhuma instrucao do executor roda fora do Job. Nao fecha hThread (o
+  // chamador o retoma e fecha). bInheritHandles=FALSE, como em Lancar.
+  public static string LancarSuspenso(IntPtr token, string cmdline, string cwd, IntPtr env, out int pid, out IntPtr hProc, out IntPtr hThread) {
+    pid = 0; hProc = IntPtr.Zero; hThread = IntPtr.Zero;
+    SI s = new SI(); s.cb = Marshal.SizeOf(typeof(SI)); PI pi;
+    uint flags = 0x08000000 | 0x00000400 | 0x00000004;   // CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED
+    if (!CreateProcessAsUserW(token, null, new StringBuilder(cmdline), IntPtr.Zero, IntPtr.Zero, false, flags, env, cwd, ref s, out pi)) return "CreateProcessAsUser " + Marshal.GetLastWin32Error();
+    pid = pi.pid; hProc = pi.hp; hThread = pi.ht; return "";
+  }
+  public static uint Retomar(IntPtr hThread) { return ResumeThread(hThread); }   // devolve a contagem de suspensao anterior (0xFFFFFFFF = erro)
   public static uint Esperar(IntPtr hProc, uint ms) { WaitForSingleObject(hProc, ms); uint c; return GetExitCodeProcess(hProc, out c) ? c : 0xFFFFFFFF; }
   // PE-F01: devolve o RESULTADO da espera (0=WAIT_OBJECT_0 sinalizado; 0x102=258 WAIT_TIMEOUT; 0xFFFFFFFF=WAIT_FAILED).
   // So apos sinalizado e que GetExitCodeProcess devolve o codigo real (senao 259 STILL_ACTIVE). Esperar() fica intacto (B-05).

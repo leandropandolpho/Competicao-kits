@@ -89,6 +89,14 @@ Push-Location $a5.Trab
 try { & $PwshAprovado -NoProfile -File $acao -PonteDir $a5.Ponte -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Simular 2>&1 | Out-Null; $c5=$LASTEXITCODE } catch { $c5=99 } finally { Pop-Location }
 Checar 'PE-S5: 2a passada nao reprocessa a falha (nenhuma pendente)' ($c5 -ne 0 -and -not (Test-Path (Join-Path $a5.Dir 'fim.flag')))
 
+"== PE-S6 (PE-F09): TestCmd com exit!=0 vira estado terminal (falhou.flag, sem fim.flag)"
+$a6 = Nova-Execucao 'ok:0.10' 'exit 1'
+$env:B05FAKE_MODO = 'ok:0.10'
+$c6 = Rodar $a6
+Remove-Item Env:B05FAKE_MODO -ErrorAction SilentlyContinue
+Checar 'PE-S6: TestCmd reprovado -> falhou.flag, sem fim.flag' ((Test-Path (Join-Path $a6.Dir 'falhou.flag')) -and -not (Test-Path (Join-Path $a6.Dir 'fim.flag'))) "codigo $c6"
+Checar 'PE-S6: teste.txt registrado (codigo=1) como evidencia' ((Test-Path (Join-Path $a6.Dir 'teste.txt')) -and ((Get-Content (Join-Path $a6.Dir 'teste.txt') -Raw) -match 'codigo=1'))
+
 # ---- Casos REAIS (Low IL): so no Windows. Executor fake rodado em baixa integridade; arvore de trabalho rotulada Low. ----
 if ($IsWindows) {
   function Real($a,[int]$to=60){ & icacls $a.Trab /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
@@ -143,6 +151,42 @@ if ($IsWindows) {
   Checar 'PE-R4c: exit.code preserva 7 e fim.flag existe' ((Test-Path (Join-Path $r6.Dir 'exit.code')) -and ((Get-Content (Join-Path $r6.Dir 'exit.code') -Raw).Trim() -eq '7') -and (Test-Path (Join-Path $r6.Dir 'fim.flag')))
   $p6 = 0; $v6 = NetoVivo $r6.Trab ([ref]$p6)
   Checar 'PE-R4c: neto NAO sobrevive a falha do executor' ($p6 -gt 0 -and $v6 -eq $false) "netoPid=$p6 vivo=$v6"
+
+  "== PE-S7 (PE-F10): rastreamento indisponivel bloqueia (fail-closed); executor NAO roda"
+  $r7 = Nova-Execucao 'ok:0.20'; $env:B05FAKE_MODO='ok:0.20'; $env:PE_TESTE_RASTREAR_FALHA='1'
+  $cr7 = Real $r7; Remove-Item Env:B05FAKE_MODO, Env:PE_TESTE_RASTREAR_FALHA -EA SilentlyContinue
+  Checar 'PE-S7: falhou.flag, sem fim.flag' ((Test-Path (Join-Path $r7.Dir 'falhou.flag')) -and -not (Test-Path (Join-Path $r7.Dir 'fim.flag')))
+  Checar 'PE-S7: executor bloqueado antes de executar (sem stdout.json)' (-not (Test-Path (Join-Path $r7.Dir 'stdout.json')))
+
+  "== PE-S8 (PE-F07): falha de associacao ao Job bloqueia ANTES de executar (suspenso encerrado)"
+  $r8 = Nova-Execucao 'ok:0.20'; $env:B05FAKE_MODO='ok:0.20'; $env:PE_TESTE_ASSOC_FALHA='1'
+  $cr8 = Real $r8; Remove-Item Env:B05FAKE_MODO, Env:PE_TESTE_ASSOC_FALHA -EA SilentlyContinue
+  Checar 'PE-S8: falhou.flag, sem fim.flag' ((Test-Path (Join-Path $r8.Dir 'falhou.flag')) -and -not (Test-Path (Join-Path $r8.Dir 'fim.flag')))
+  Checar 'PE-S8: executor nao resumido (sem stdout.json)' (-not (Test-Path (Join-Path $r8.Dir 'stdout.json')))
+
+  "== PE-L (PE-F08): -Laco encerra o Job por execucao (neto da 1a morre antes da 2a; acao-pe segue vivo)"
+  $Lb = Nova-Execucao 'neto:60:0:0'
+  & icacls $Lb.Trab /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
+  $env:B05FAKE_MODO = 'neto:60:0:0'
+  $lacoProc = Start-Process -FilePath $PwshAprovado -PassThru -WindowStyle Hidden -WorkingDirectory $Lb.Trab -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$acao,'-PonteDir',$Lb.Ponte,'-PwshAprovado',$PwshAprovado,'-PwshSha256',$shaPwsh,'-TimeoutSeg','60','-Laco')
+  $t0=Get-Date; while(-not (Test-Path (Join-Path $Lb.Dir 'fim.flag')) -and ((Get-Date)-$t0).TotalSeconds -lt 40){ Start-Sleep -Milliseconds 300 }
+  Checar 'PE-L: 1a execucao concluiu (fim.flag) sob -Laco' (Test-Path (Join-Path $Lb.Dir 'fim.flag'))
+  $np=''; if (Test-Path (Join-Path $Lb.Trab 'neto-pid.txt')) { $np=(Get-Content (Join-Path $Lb.Trab 'neto-pid.txt') -Raw) }
+  $np1=0; $nt1=0; if($np -match '^(\d+)\|(\d+)$'){ $np1=[int]$Matches[1]; $nt1=[long]$Matches[2] }
+  Start-Sleep -Seconds 2
+  $lacoVivo = $false; try { $gp=Get-Process -Id $lacoProc.Id -EA SilentlyContinue; $lacoVivo = [bool]$gp -and -not $gp.HasExited } catch {}
+  $neto1Vivo=$false; if($np1 -gt 0){ $pp=Get-Process -Id $np1 -EA SilentlyContinue; if($pp -and $pp.StartTime.ToUniversalTime().Ticks -eq $nt1){ $neto1Vivo=$true } }
+  Checar 'PE-L: acao-pe -Laco ainda vivo apos a 1a execucao' $lacoVivo
+  Checar 'PE-L: neto da 1a morto pelo teardown do Job (nao so na saida do processo)' ($np1 -gt 0 -and -not $neto1Vivo) "netoPid=$np1 vivo=$neto1Vivo"
+  $id2=[guid]::NewGuid().ToString('N'); $d2=Join-Path $Lb.Ponte $id2; New-Item -ItemType Directory -Force $d2|Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $d2 'prompt.in'),'t2',[Text.UTF8Encoding]::new($false))
+  $pd2=[ordered]@{exec_id=$id2;executor=$PwshAprovado;executor_prefixo=("-NoProfile|-File|$fake");test_cmd='';teto_usd=0.5;pwsh_sha256=$shaPwsh;criado_em=(Get-Date).ToString('o')}
+  [System.IO.File]::WriteAllText((Join-Path $d2 'pedido.json'),($pd2|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+  [System.IO.File]::WriteAllText((Join-Path $d2 'go.flag'),'1',[Text.UTF8Encoding]::new($false))
+  $t0=Get-Date; while(-not (Test-Path (Join-Path $d2 'fim.flag')) -and ((Get-Date)-$t0).TotalSeconds -lt 40){ Start-Sleep -Milliseconds 300 }
+  Checar 'PE-L: 2a execucao concluiu na MESMA instancia -Laco' (Test-Path (Join-Path $d2 'fim.flag'))
+  try { Stop-Process -Id $lacoProc.Id -Force -EA SilentlyContinue } catch {}
+  Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
 }
 
 "`nTOTAL PE: $ok / $tot"

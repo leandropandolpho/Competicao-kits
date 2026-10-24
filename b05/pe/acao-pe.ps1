@@ -71,12 +71,26 @@ function Rodar-LowIL([IntPtr]$job,[string]$exe,[string[]]$argz,[string]$cwd,[has
   $tok = [IntPtr]::Zero; $m = [B05LowIL]::CriarToken([ref]$tok); if ($m) { throw "token baixo: $m" }
   $cmdline = B05LowIL-Cmdline $exe $argz $inF $outF $errF
   $bloco = B05LowIL-BlocoAmbiente $env
-  $lpid = 0; $hProc = [IntPtr]::Zero
-  try { $ml = [B05LowIL]::Lancar($tok, $cmdline, $cwd, $bloco, [ref]$lpid, [ref]$hProc) }
+  $lpid = 0; $hProc = [IntPtr]::Zero; $hThread = [IntPtr]::Zero
+  try { $ml = [B05LowIL]::LancarSuspenso($tok, $cmdline, $cwd, $bloco, [ref]$lpid, [ref]$hProc, [ref]$hThread) }
   finally { [System.Runtime.InteropServices.Marshal]::FreeHGlobal($bloco); [B05LowIL]::Fechar($tok) }
   if ($ml) { throw "low-IL nao iniciou: $ml" }
-  [void][B05Job]::AssignProcessToJobObject($job, $hProc)   # PE-F05: associa o FILHO (nao o acao-pe) ao job
-  try { [B05Job]::Rastrear([uint32]$lpid) } catch { }       # rastreia enquanto vivo (p/ Verificar depois)
+  # PE-F07: o processo nasce SUSPENSO. Associa ao Job com retorno OBRIGATORIO, confirma em_job e so entao RETOMA — nenhuma
+  # instrucao do executor (nem descendente) roda fora do Job. Qualquer falha encerra o suspenso sem jamais executar codigo.
+  $assoc = [B05Job]::AssignProcessToJobObject($job, $hProc)
+  if ((-not $assoc) -or ($env:PE_TESTE_ASSOC_FALHA -eq '1')) {
+    [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc); [B05LowIL]::Fechar($hThread)
+    throw "PE-F07: associacao ao Job falhou (assoc=$assoc err=$([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())) — executor suspenso encerrado"
+  }
+  if ([B05LowIL]::EmJob($hProc) -ne $true) {
+    [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc); [B05LowIL]::Fechar($hThread)
+    throw 'PE-F07: processo nao esta no Job antes de executar — encerrado'
+  }
+  # PE-F10: rastreamento e FAIL-CLOSED. Sem a raiz rastreada, Verificar nao identifica descendentes. Erro aqui = bloqueio.
+  if ($env:PE_TESTE_RASTREAR_FALHA -eq '1') { [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc); [B05LowIL]::Fechar($hThread); throw 'PE-F10 (teste): rastreamento indisponivel — execucao bloqueada' }
+  try { [B05Job]::Rastrear([uint32]$lpid) }
+  catch { [B05LowIL]::Encerrar($hProc); [B05LowIL]::Fechar($hProc); [B05LowIL]::Fechar($hThread); throw "PE-F10: rastreamento do executor falhou ($($_.Exception.Message)) — execucao bloqueada" }
+  [void][B05LowIL]::Retomar($hThread); [B05LowIL]::Fechar($hThread)   # libera a execucao JA contida no Job
   $cri = [B05LowIL]::CriacaoUtc($hProc); $emJob = [B05LowIL]::EmJob($hProc)
   $nivel = [B05LowIL]::NivelH($hProc)   # PE-R1: nivel pelo handle (robusto a executor que sai rapido; Nivel(pid) tem corrida)
   $sinal = [B05LowIL]::EsperarSinal($hProc, [uint32]($timeoutSeg * 1000))
@@ -107,6 +121,7 @@ function Processar([string]$dir) {
   if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { throw 'Configurar(KILL_ON_JOB_CLOSE) falhou' }
   [void][B05Job]::RestringirUI($job)
 
+  try {
   $cTmp = Join-Path ($env:TEMP) ('pe-' + $execId.Substring(0,12)); New-Item -ItemType Directory -Force $cTmp | Out-Null
   $pid_exec = 0; $criacao = ''; $nivel = $null; $emJob = $null; $saida = ''; $erro = ''; $codigo = -2
 
@@ -165,6 +180,7 @@ function Processar([string]$dir) {
       $tout = $pp.StandardOutput.ReadToEndAsync(); $terr = $pp.StandardError.ReadToEndAsync()
       if (-not $pp.WaitForExit($TimeoutSeg * 1000)) { [void][B05Job]::TerminateJobObject($job, 29); throw "timeout do TestCmd: job encerrado" }   # PE-F04
       Grava $dir 'teste.txt' ("codigo=$($pp.ExitCode)`n" + $tout.Result + $terr.Result)
+      if ($pp.ExitCode -ne 0) { throw "PE-F09: TestCmd reprovado (codigo $($pp.ExitCode)) — estado terminal, sem fim.flag" }
     } else {
       $cT = Join-Path ($env:TEMP) ('pet-' + $execId.Substring(0,12)); New-Item -ItemType Directory -Force $cT | Out-Null
       & icacls $cT /setintegritylevel '(OI)(CI)low' /Q 2>&1 | Out-Null
@@ -172,13 +188,23 @@ function Processar([string]$dir) {
       if ($rt.Nivel -ne 4096) { throw "TestCmd nao rodou em Low IL (nivel $($rt.Nivel))" }   # PE-F02
       Grava $dir 'teste.txt' ("codigo=$($rt.Codigo) nivel=$($rt.Nivel)`n" + $rt.Saida + $rt.Erro)
       try { Remove-Item -Recurse -Force $cT -ErrorAction SilentlyContinue } catch { }
+      if ($rt.Codigo -ne 0) { throw "PE-F09: TestCmd reprovado (codigo $($rt.Codigo)) — estado terminal, sem fim.flag" }
     }
   }
   try { Remove-Item -Recurse -Force $cTmp -ErrorAction SilentlyContinue } catch { }
 
   Grava $dir 'heartbeat' ([string](Agora))
+  # PE-F08: encerra a arvore do Job ANTES de sinalizar o fim ao PU (nao depende de -Laco nem de o acao-pe sair).
+  [void][B05Job]::TerminateJobObject($job, 0)
   Grava $dir 'fim.flag' (Json @{ exec_id = $execId; pe_pid = $PID; codigo = $codigo; fim_utc = (Get-Date).ToUniversalTime().ToString('o') })
-  # O job (com este processo) morre com KILL_ON_JOB_CLOSE quando este processo sair => nenhum orfao sobrevive ao PE.
+  }
+  finally {
+    # PE-F08: fecha o Job por execucao em QUALQUER saida (sucesso ou excecao). O TerminateJobObject acima ja mata a
+    # arvore antes do fim.flag; fechar o ultimo handle aqui dispara KILL_ON_JOB_CLOSE. No -Laco, impede que
+    # descendentes de uma execucao sobrevivam a ela enquanto o acao-pe segue vivo para a proxima.
+    try { [void][B05Job]::TerminateJobObject($job, 0) } catch { }
+    try { [void][B05Job]::CloseHandle($job) } catch { }
+  }
 }
 
 # PE-F05: falha vira estado TERMINAL (falhou.flag). Pendente ignora fim.flag E falhou.flag => nao reselecionada; nova
