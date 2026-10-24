@@ -143,8 +143,12 @@ function Invoke-PontePU-V1 {
   # N-03: confirma a morte da SUBARVORE (acao-pe + executor + descendentes)
   Start-Sleep -Milliseconds 300
   $morte = PU-Subarvore-Morta $embPid $embCri
-  if (-not $morte.Morta) { PU-Encerrar-Subarvore $embPid $embCri; Start-Sleep -Milliseconds 400; $morte = PU-Subarvore-Morta $embPid $embCri }
-  if (-not $morte.Morta) { $res.Violacao = $true; $res.Motivo = ("$($res.Motivo) | subarvore do PE viva: " + ([string]::Join('; ', $morte.Vivos))).Trim(' |') }
+  if (-not $morte.Morta) {
+    # Contencao FALHOU: um descendente sobreviveu ao fim do embrulho => VIOLACAO (70), mesmo que o PU consiga limpar.
+    PU-Encerrar-Subarvore $embPid $embCri; Start-Sleep -Milliseconds 400; $morte2 = PU-Subarvore-Morta $embPid $embCri
+    $res.Violacao = $true
+    $res.Motivo = ("$($res.Motivo) | subarvore do PE viva apos o fim (contencao falhou): " + ([string]::Join('; ', $morte.Vivos)) + $(if (-not $morte2.Morta) { ' | AINDA viva apos limpeza: ' + ([string]::Join('; ', $morte2.Vivos)) } else { ' (limpa pelo PU)' })).Trim(' |')
+  }
   # REQ-07/N-04 (apos morte, antes de retornar): varredura de reparse fail-closed na ARVORE e na PASTA-PONTE
   $rep = B05LowIL-ReparsePoints $TrabDir; $repP = B05LowIL-ReparsePoints $dir
   if (-not $rep.Ok -or @($rep.Pontos).Count -or -not $repP.Ok -or @($repP.Pontos).Count) {
