@@ -24,7 +24,7 @@ if (-not $Simular) { . (Join-Path $PSScriptRoot '..\baixa-integridade.ps1') }
 function Agora { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 function Grava([string]$dir,[string]$nome,[string]$txt) {   # escrita atomica na pasta-ponte
   $tmp = Join-Path $dir ($nome + '.tmp'); [System.IO.File]::WriteAllText($tmp, $txt, $Utf8)
-  [System.IO.File]::Move($tmp, (Join-Path $dir $nome))
+  [System.IO.File]::Move($tmp, (Join-Path $dir $nome), $true)   # overwrite: heartbeat e reescrito varias vezes
 }
 function Json($o) { $o | ConvertTo-Json -Compress -Depth 6 }
 
