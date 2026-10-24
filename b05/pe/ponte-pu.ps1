@@ -38,7 +38,7 @@ function PU-Lease-Fechar([string]$travaDir,[string]$execId) { Remove-Item -Liter
 # N-01: arvore de trabalho BAIXA para o executor Low editar codigo, MAS .git em MEDIO (o executor Low nao toca
 # .git/hooks|config). Espelha a blindagem validada do lancador.ps1 (B-05). Falha fechada: confere icacls e re-le o IL.
 function PU-RotularArvore([string]$trab) {
-  foreach ($e in @(Get-ChildItem -LiteralPath $trab -Force | Where-Object Name -ne '.git')) { PU-Icacls @($e.FullName,'/setintegritylevel','(OI)(CI)low','/T','/Q') }
+  PU-Icacls @($trab,'/setintegritylevel','(OI)(CI)low','/T','/Q')   # arvore INTEIRA (raiz+filhos) Low: executor Low edita/CRIA
   $gitDir = Join-Path $trab '.git'
   if (Test-Path -LiteralPath $gitDir) {
     PU-Icacls @($gitDir,'/setintegritylevel','(OI)(CI)medium','/T','/Q')
