@@ -1,0 +1,81 @@
+== JOB 109 - PU + CONTROLADOR REAL ==
+quando: 2026-10-24 19:00:15
+SHA ponte-pu: FC262DC947F4DDC3D55C2FE569F5AAF421F55C24C27BDBD0EFFBA2D8EF41B6A4
+SHA testar-ponte-pu: 07CCB11FCEF9A19E03DEFB15A4B16C1F64AEC9B3139B7BD75459094E7D8D6EBA
+
+== BATERIA PU ==
+== PU-01: fluxo feliz (executor ok) -> codigo 0, stdout, subarvore morta, sem trava, razao reconciliado (REQ-02)
+[ok] PU-01: codigo 0 e Ok
+[ok] PU-01: stdout com result do executor
+[ok] PU-01: sem violacao e sem trava
+[ok] PU-01: razao com reserva (inicio teto=0.5)
+[ok] PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)
+== PU-02 (REQ-02): executor reporta total_cost_usd INVALIDO (texto) -> custo desconhecido -> 28 + trava financeira
+[ok] PU-02: custo invalido -> codigo 28, violacao
+[ok] PU-02: trava FINANCEIRA gravada
+[ok] PU-02: razao fim custo_desconhecido (nao vira zero, D-06 c)
+[ok] PU-02: evidencia bruta preservada fora do repo
+[ok] PU-02b: 2a chamada barrada pela trava FINANCEIRA com codigo 28 (preserva a classe)
+== PU-13 (N-01): executor Low tenta escrever .git/hooks e .git/config -> NEGADO (.git Medium)
+[ok] PU-13: executor rodou e gravou ataque.txt
+[ok] PU-13: git_hook NEGADO (.git Medium barra Low)
+[ok] PU-13: git_config NEGADO
+== PU-03 (N-02): pasta exec_id pre-existente -> recusa (70), nao despacha
+[ok] PU-03: recusou exec_id pre-existente (codigo 70, violacao)
+[ok] PU-03: nao reutilizou/apagou (residuo fim.flag intacto)
+== PU-07 (reparse): junction na arvore, embrulho NAO varre -> varredura do PU pos-morte -> 70
+[ok] PU-07: reparse detectado -> codigo 70, violacao
+[ok] PU-07: evidencia preservada fora do repo
+[ok] PU-07: trava de seguranca gravada
+== PU-04 (sobrevivente): acao nao-contida deixa neto vivo -> REQ-03 do PU detecta -> 70 + evidencia + trava
+[ok] PU-04: sobrevivente -> codigo 70, violacao
+[ok] PU-04: evidencia preservada
+== PU-10: apos a violacao (PU-04), a 2a chamada e BARRADA pela trava (sem despachar)
+[ok] PU-10: 2a chamada barrada pela trava (codigo 70, motivo=trava)
+== PU-08 (N-06): acao que trava -> timeout do PU, subarvore morta, sem fim.flag -> 28 (financeiro), sem retry
+[ok] PU-08: timeout do PU -> codigo 28 (financeiro), violacao
+[ok] PU-08: trava FINANCEIRA gravada
+== PU-05 (REQ-06/D-06 d): executor OK (custo conhecido) mas teste REPROVA -> falhou.flag por execucao, custo conhecido, retry com exec_id novo
+[ok] PU-05: teste reprovado -> codigo 1 (falha comum, nao violacao)
+[ok] PU-05: classificado D-06(d) falha de teste
+[ok] PU-05: teste.txt registrou reprovacao (codigo=3)
+[ok] PU-05: razao fim custo CONHECIDO (executor rodou, 0.20; nao desconhecido)
+[ok] PU-05: 2a tentativa (exec_id novo) NAO barrada -> executa (codigo 0)
+== PU-12 (REQ-04/S-03): o codigo do TESTE roda em Low IL e NAO escreve em alvo Medium (.git) -> NEGADO (fronteira de IL)
+[ok] PU-12: fluxo OK (teste tratou o erro e saiu 0) -> codigo 0
+[ok] PU-12: teste rodou em Low IL (nivel=4096)
+[ok] PU-12: escrita Low em .git (Medium) NEGADA (fronteira de IL)
+[ok] PU-12: teste.txt NAO forjavel pelo codigo Low (gravado pelo PE em Medium)
+== PU-14 (D-2): fase SOMENTE-TESTE via ponte -> teste roda sob o PE em Low IL (Job novo), escrita Low em .git NEGADA
+[ok] PU-14: fase somente-teste concluiu (codigo 0, fim.flag)
+[ok] PU-14: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU
+[ok] PU-14: escrita Low em .git (Medium) pela via do TESTE -> NEGADA (fecha V1-F02)
+== PU-15 (REQ-04 completo): teste Low NAO escreve em alvo Medium e NAO faz acesso perigoso ao processo supervisor
+[ok] PU-15: teste em Low IL (nivel=4096)
+[ok] PU-15: escrita Low em alvo MEDIO (ex. teste.txt/pasta-ponte) -> NEGADA
+[ok] PU-15: acesso perigoso ao processo supervisor (Medium) -> NEGADO
+[ok] PU-15: supervisor permaneceu vivo (nao foi encerrado pelo teste Low)
+
+TOTAL PU: 39 / 39
+== EXITCODE PU: 0 ==
+
+== BATERIA CTRL ==
+== I-C1 (REQ-08): controlador REAL -> ponte -> executor edita + teste passa -> commit (done)
+[FALHA] I-C1: controlador saiu 0 (done) cod=1 err=
+[FALHA] I-C1: commit efetivado (HEAD avancou) 
+[ok] I-C1: executor editou a arvore via ponte (notas.txt)
+[ok] I-C1: razao reconciliado com custo > 0
+== I-D2 (fecha V1-F02): o TestCmd roda via ponte sob o PE em Low IL; escrita Low em .git (Medium) NEGADA (nao e PU)
+[ok] I-D2: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU
+[ok] I-D2: escrita Low em .git (Medium) pela via do TESTE -> NEGADA
+== I-TMO (REQ-10): executor trava via ponte -> ponte encerra -> controlador rollback (sem commit)
+[ok] I-TMO: controlador NAO comitou (HEAD=base)
+[ok] I-TMO: arvore limpa apos rollback
+== I-RET (REQ-12): retomada preserva o custo do razao (nao zera) e pre-flight encerra orfao vivo anterior
+[ok] I-RET: custo preservado na retomada (nao zerou; acumulou)
+[FALHA] I-RET: pre-flight encerrou o orfao vivo antes de despachar 
+
+TOTAL INTEGRA-CTRL: 7 / 10
+== EXITCODE CTRL: 1 ==
+
+== TOTAL: PU=0 CTRL=1 -> 1 ==

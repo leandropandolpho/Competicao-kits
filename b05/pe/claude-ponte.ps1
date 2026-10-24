@@ -25,11 +25,15 @@ if (-not (Test-Path -LiteralPath $arqCfg)) { Sair-Erro "config da execucao ausen
 $cfg = Get-Content -LiteralPath $arqCfg -Raw -Encoding utf8 | ConvertFrom-Json
 if ("$($cfg.execucao)" -ne $execucao) { Sair-Erro 'config nao corresponde a execucao' 1 }
 
-# Prompt: o controlador passa `-p <prompt>` (ou o prompt via stdin). Extrai sem depender de parser nomeado.
+# Prompt: o controlador congelado passa `-p` como FLAG e o prompt pela ENTRADA PADRAO (stdin). Lemos o stdin primeiro;
+# so caimos no valor de `-p <prompt>` se o stdin estiver vazio E o proximo token nao for outra flag (nao confundir
+# `-p --output-format` com um prompt). Assim o wrapper serve tanto ao controlador real quanto a chamadas com -p literal.
 $prompt = ''
-$lista = @($args | ForEach-Object { [string]$_ })
-for ($i = 0; $i -lt $lista.Count; $i++) { if ($lista[$i] -eq '-p' -and ($i + 1) -lt $lista.Count) { $prompt = $lista[$i + 1]; break } }
-if (-not $prompt -and [Console]::IsInputRedirected) { $prompt = [Console]::In.ReadToEnd() }
+if ([Console]::IsInputRedirected) { try { $prompt = [Console]::In.ReadToEnd() } catch { $prompt = '' } }
+if (-not $prompt) {
+  $lista = @($args | ForEach-Object { [string]$_ })
+  for ($i = 0; $i -lt $lista.Count; $i++) { if ($lista[$i] -eq '-p' -and ($i + 1) -lt $lista.Count -and $lista[$i + 1] -notlike '-*') { $prompt = $lista[$i + 1]; break } }
+}
 
 # Nucleo do PU, carregado de FORA da arvore de trabalho (I2): mesma pasta deste wrapper (b05/pe), protegida por ACL/IL
 # e com SHA-256 conferido pelo provisionamento (copia confiavel do PU). O fonte no GitHub nao substitui a protecao runtime.

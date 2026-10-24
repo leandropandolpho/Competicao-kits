@@ -115,8 +115,10 @@ function PU-Razao-Inicio([string]$razaoDir,[string]$execId,[double]$teto) {
 }
 function PU-Razao-Fim([string]$razaoDir,[string]$execId,[bool]$desconhecido,[double]$custo,[string]$fase) {
   if (-not $razaoDir) { return }
+  # O contrato do razao.ps1 (baseline 9e6991c, StrictMode) le $f.custo_desconhecido SEMPRE: o campo precisa existir em
+  # todo evento 'fim' (como faz o claude-com-teto). Conhecido => custo_usd + custo_desconhecido=$false.
   $ev = @{ evento='fim'; id=$execId; fase=$fase; origem='ponte-pu' }
-  if ($desconhecido) { $ev['custo_desconhecido'] = $true } else { $ev['custo_usd'] = $custo }
+  if ($desconhecido) { $ev['custo_desconhecido'] = $true } else { $ev['custo_usd'] = $custo; $ev['custo_desconhecido'] = $false }
   Razao-Gravar $razaoDir $ev
 }
 

@@ -70,7 +70,7 @@ $ev1 = Eventos-Razao $a
 $ini1 = @($ev1 | Where-Object { $_.evento -eq 'inicio' -and "$($_.id)" -eq $r.ExecId })
 $fim1 = @($ev1 | Where-Object { $_.evento -eq 'fim' -and "$($_.id)" -eq $r.ExecId })
 Checar 'PU-01: razao com reserva (inicio teto=0.5)' ($ini1.Count -eq 1 -and [double]$ini1[0].teto_usd -eq 0.5) "ini=$($ini1.Count)"
-Checar 'PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)' ($fim1.Count -eq 1 -and -not $fim1[0].PSObject.Properties['custo_desconhecido'] -and [double]$fim1[0].custo_usd -eq 0.20) "fim=$($fim1.Count) custo=$($fim1[0].custo_usd)"
+Checar 'PU-01: razao reconciliado (fim custo_usd=0.20 conhecido, D-06 b)' ($fim1.Count -eq 1 -and $fim1[0].custo_desconhecido -ne $true -and [double]$fim1[0].custo_usd -eq 0.20) "fim=$($fim1.Count) custo=$($fim1[0].custo_usd)"
 
 "== PU-02 (REQ-02): executor reporta total_cost_usd INVALIDO (texto) -> custo desconhecido -> 28 + trava financeira"
 $a2 = Novo-Amb
@@ -141,7 +141,7 @@ $ev5 = Eventos-Razao $h5; $fim5 = @($ev5 | Where-Object { $_.evento -eq 'fim' -a
 Checar 'PU-05: teste reprovado -> codigo 1 (falha comum, nao violacao)' ($r5.Codigo -eq 1 -and -not $r5.Violacao) "cod=$($r5.Codigo) motivo=$($r5.Motivo)"
 Checar 'PU-05: classificado D-06(d) falha de teste' ($r5.Motivo -match 'falha de teste')
 Checar 'PU-05: teste.txt registrou reprovacao (codigo=3)' ((Test-Path $teste5) -and ((Get-Content $teste5 -Raw) -match 'codigo=3'))
-Checar 'PU-05: razao fim custo CONHECIDO (executor rodou, 0.20; nao desconhecido)' ($fim5.Count -eq 1 -and -not $fim5[0].PSObject.Properties['custo_desconhecido'] -and [double]$fim5[0].custo_usd -eq 0.20) "fim=$($fim5.Count)"
+Checar 'PU-05: razao fim custo CONHECIDO (executor rodou, 0.20; nao desconhecido)' ($fim5.Count -eq 1 -and $fim5[0].custo_desconhecido -ne $true -and [double]$fim5[0].custo_usd -eq 0.20) "fim=$($fim5.Count)"
 # REQ-06: falha de teste NAO grava trava; a 2a tentativa (exec_id NOVO) despacha normalmente
 $r5b = Invoke-PontePU-V1 -PonteDir $h5.Ponte -TrabDir $h5.Trab -AcaoPs1 $acao -PwshAprovado $PwshAprovado -PwshSha256 $shaPwsh -Pedido (Ped) -Prompt 'x' -TimeoutSeg 60 -EvidenciaDir $h5.Evid -TravaDir $h5.Trava -RazaoDir $h5.Razao
 Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue

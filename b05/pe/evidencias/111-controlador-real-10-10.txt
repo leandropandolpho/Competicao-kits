@@ -1,0 +1,24 @@
+== JOB 111 - CONTROLADOR REAL em modo ponte ==
+quando: 2026-10-24 19:07:08  git=True
+SHA controlador: CED2EC45BE2FF8405C57874BC29373F7E8AC6F20B696DEE512A3E562F3E6608E
+SHA claude-ponte: E66377243DA196649E77C35D843CD0442CF0267F5B7FB680C3D858CC635F22C3
+SHA despachante-teste: 2261B1118CCEE3326F6D04B0F61BA9FA07A85B03D5CDCD105744E1062F58FC0A
+== bateria ==
+== I-C1 (REQ-08): controlador REAL -> ponte -> executor edita + teste passa -> commit (done)
+[ok] I-C1: controlador saiu 0 (done)
+[ok] I-C1: commit efetivado (HEAD avancou)
+[ok] I-C1: executor editou a arvore via ponte (notas.txt)
+[ok] I-C1: razao reconciliado com custo > 0
+== I-D2 (fecha V1-F02): o TestCmd roda via ponte sob o PE em Low IL; escrita Low em .git (Medium) NEGADA (nao e PU)
+[ok] I-D2: teste rodou sob o PE em Low IL (nivel=4096), NAO como PU
+[ok] I-D2: escrita Low em .git (Medium) pela via do TESTE -> NEGADA
+== I-TMO (REQ-10): executor trava via ponte -> ponte encerra -> controlador rollback (sem commit)
+[ok] I-TMO: controlador NAO comitou (HEAD=base)
+[ok] I-TMO: arvore limpa apos rollback
+== I-RET (REQ-12): retomada preserva o custo do razao (nao zera) e pre-flight encerra orfao vivo anterior
+[ok] I-RET: custo preservado na retomada (nao zerou; acumulou)
+[ok] I-RET: pre-flight encerrou o orfao vivo antes de despachar
+
+TOTAL INTEGRA-CTRL: 10 / 10
+
+== EXITCODE: 0 ==
