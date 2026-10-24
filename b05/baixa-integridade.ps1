@@ -124,6 +124,23 @@ public static class B05LowIL {
       } finally { Marshal.FreeHGlobal(buf); }
     } finally { CloseHandle(tok); CloseHandle(h); }
   }
+  // PE-F01/PE-R1: nivel de integridade pelo HANDLE do processo (valido mesmo apos ele sair, enquanto o handle vive).
+  // Evita a corrida de Nivel(pid), que devolve -1 quando o executor sai rapido (OpenProcess de PID morto falha).
+  public static int NivelH(IntPtr h) {
+    IntPtr tok;
+    if (!OpenProcessToken(h, 0x0008, out tok)) return -1;   // TOKEN_QUERY
+    try {
+      uint need = 0; GetTokenInformation(tok, 25, IntPtr.Zero, 0, out need);
+      if (need == 0) return -1;
+      IntPtr buf = Marshal.AllocHGlobal((int)need);
+      try {
+        if (!GetTokenInformation(tok, 25, buf, need, out need)) return -1;
+        IntPtr sid = Marshal.ReadIntPtr(buf);
+        int cont = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+        return (int)(uint)Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(cont - 1)));
+      } finally { Marshal.FreeHGlobal(buf); }
+    } finally { CloseHandle(tok); }
+  }
 }
 '@
 }

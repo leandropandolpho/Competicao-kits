@@ -70,8 +70,7 @@ function Rodar-LowIL([IntPtr]$job,[string]$exe,[string[]]$argz,[string]$cwd,[has
   [void][B05Job]::AssignProcessToJobObject($job, $hProc)   # PE-F05: associa o FILHO (nao o acao-pe) ao job
   try { [B05Job]::Rastrear([uint32]$lpid) } catch { }       # rastreia enquanto vivo (p/ Verificar depois)
   $cri = [B05LowIL]::CriacaoUtc($hProc); $emJob = [B05LowIL]::EmJob($hProc)
-  Start-Sleep -Milliseconds 150
-  $nivel = [B05LowIL]::Nivel($lpid)
+  $nivel = [B05LowIL]::NivelH($hProc)   # PE-R1: nivel pelo handle (robusto a executor que sai rapido; Nivel(pid) tem corrida)
   $sinal = [B05LowIL]::EsperarSinal($hProc, [uint32]($timeoutSeg * 1000))
   if ($sinal -ne 0) { [void][B05Job]::TerminateJobObject($job, 29); [B05LowIL]::Fechar($hProc); throw "timeout/espera (sinal 0x$($sinal.ToString('X'))) apos ${timeoutSeg}s: job encerrado" }
   $cod = [int][B05LowIL]::Esperar($hProc, 0)   # ja sinalizado: codigo real (nao 259)
