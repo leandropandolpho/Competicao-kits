@@ -131,6 +131,28 @@ bateria verde: exige reconciliacao de evidencias e objecoes materiais (decisao t
   falha-comum-com-retry. Classificar: (a) anterior a invocacao; (b) posterior com custo CONHECIDO; (c) posterior com
   custo DESCONHECIDO; (d) falha exclusivamente de teste. Custo desconhecido NAO vira zero nem autoriza nova invocacao
   sem reconciliacao/admissao suficientes; reserva pendente permanece contabilizada (sem virar gasto conhecido).
+
+## 10. Emendas do Ato 148 (resposta ao parecer da mesa no Ato 147; candidata nova, a2c002f preservado)
+- ERRATA REQ-08 (D-1, pedido por Perplexity): "a ponte e escolhida por flag de config" = a ponte e escolhida por QUAL
+  ClaudeCmd/TestCmd o controlador RECEBE (parametros externos). O modo principal-isolado e um WRAPPER SEPARADO
+  (b05/pe/claude-ponte.ps1 + .cmd) passado como ClaudeCmd; a fase teste e o despachante P-B (b05/pe/despachante-teste.ps1
+  + .cmd) passado como TestCmd. NAO se modifica claude-com-teto.ps1 (baseline 9e6991c diff VAZIO) nem o controlador
+  (7cd7864 diff VAZIO) nem o lancador. Provado com o CONTROLADOR REAL (testar-controlador-real-ponte.ps1, I-C1/I-D2/I-TMO/I-RET).
+- D-2 RESOLVIDO na V1 (objecao de Perplexity/ChatGPT acatada): o despachante P-B entra JA na V1. O controlador recebe o
+  despachante como $TestCmd; o despachante despacha o teste a ponte em modo SOMENTE-TESTE (acao-pe com somente_teste=true,
+  invocacao NOVA => Job NOVO), rodando o $TestCmd sob o PE em Low IL (nivel 4096), sem a chave, IPC em Medium, apos a morte
+  do executor. Assim o passo 6 do controlador NUNCA executa o codigo do repositorio como PU (I2/E105-01 preservada).
+  Provas: PU-14 (nucleo), I-D2 (controlador real) - escrita Low em .git via a fase teste NEGADA.
+- D-3 CORRIGIDO (condicoes de ChatGPT/Perplexity): (1) a trava persistente FINANCEIRA preserva o codigo 28 (nao 70
+  generico) - PU-Trava-Ativa expoe o tipo (PU-02b). (2) em falha com custo CONHECIDO o wrapper devolve esse custo ao
+  controlador, nunca 0 (CustoUsd no resultado; V1-F04). (3) falha ao gravar a RESERVA bloqueia fail-closed (28, sem
+  disparo). (4) o evento 'fim' sempre inclui custo_desconhecido (contrato do razao.ps1). C6 real: a retomada preserva o
+  custo do razao e o pre-flight encerra orfao anterior (I-RET).
+- REQ-04 completo (PU-15): o codigo do teste (Low) nao escreve em alvo Medium (teste.txt/pasta-ponte) nem faz acesso
+  perigoso ao processo supervisor (Stop-Process NEGADO; supervisor segue vivo).
+- Cobertura do REQ-08 com o CONTROLADOR REAL 7cd7864 (nao o minimo): I-C1 (sucesso->commit), I-D2 (teste em Low, nao PU),
+  I-TMO (timeout->rollback), I-RET (retomada/custo+pre-flight). O teste 'minimo' foi renomeado (M-C1/M-CUSTO/M-ORFAO)
+  para nao colidir com os nomes do harness do oraculo (C4=timeout, C6=morte do controlador).
 - R1/REQ-11: a trava impede novo despacho e preserva evidencia; o estado final pode ser HOLD (exit 2) quando houver
   gatilho R1 concomitante, em vez de failed — respeitar a precedencia do controlador congelado.
 - Copia confiavel do PU: a copia da ponte e do despachante executada pelo PU fica fora da arvore editavel pelo PE

@@ -82,33 +82,33 @@ if ($repoRaiz -and (& git -C $repoRaiz cat-file -t 7cd7864 2>$null) -eq 'commit'
 }
 
 # ---------- C1: sucesso -> ponte despacha PE, executor edita, custo reconciliado, controlador comita ----------
-"== C1 (REQ-08): fluxo feliz pela ponte -> executor edita a arvore, custo reconciliado, commit"
+"== M-C1 (REQ-08, controlador MINIMO): fluxo feliz pela ponte -> executor edita a arvore, custo reconciliado, commit"
 $a1 = Novo-Ambiente
 $env:B05FAKE_MODO = 'ok:0.20'
 $r1 = Controlador-Chamar $a1
 Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
 $razao1 = Join-Path $a1.Ctrl 'razao.jsonl'
 $ev1 = if (Test-Path $razao1) { @(Get-Content $razao1 | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() }
-$fim1 = @($ev1 | Where-Object { $_.evento -eq 'fim' -and -not $_.PSObject.Properties['custo_desconhecido'] -and [double]$_.custo_usd -eq 0.20 })
-Checar 'C1: claude-ponte saiu 0' ($r1.Codigo -eq 0) "cod=$($r1.Codigo) saida=$($r1.Saida)"
-Checar 'C1: controlador comitou (HEAD avancou)' ($r1.Commitou -and $r1.HeadAgora -ne $r1.HeadBase)
-Checar 'C1: executor editou a arvore (notas.txt commitado)' (Test-Path (Join-Path $a1.Repo 'notas.txt'))
-Checar 'C1: razao reconciliado (fim custo_usd=0.20 conhecido)' ($fim1.Count -ge 1)
+$fim1 = @($ev1 | Where-Object { $_.evento -eq 'fim' -and $_.custo_desconhecido -ne $true -and [double]$_.custo_usd -eq 0.20 })
+Checar 'M-C1: claude-ponte saiu 0' ($r1.Codigo -eq 0) "cod=$($r1.Codigo) saida=$($r1.Saida)"
+Checar 'M-C1: controlador comitou (HEAD avancou)' ($r1.Commitou -and $r1.HeadAgora -ne $r1.HeadBase)
+Checar 'M-C1: executor editou a arvore (notas.txt commitado)' (Test-Path (Join-Path $a1.Repo 'notas.txt'))
+Checar 'M-C1: razao reconciliado (fim custo_usd=0.20 conhecido)' ($fim1.Count -ge 1)
 
 # ---------- C4: custo invalido -> claude-ponte 28 -> rollback, sem commit, trava financeira ----------
-"== C4 (REQ-08/C-02/C-03): custo invalido pela ponte -> erro 28 -> rollback (HEAD=base, arvore limpa), trava financeira"
+"== M-CUSTO (REQ-02/C-02/C-03, controlador MINIMO): custo invalido pela ponte -> erro 28 -> rollback (HEAD=base, arvore limpa), trava financeira"
 $a4 = Novo-Ambiente
 $env:B05FAKE_MODO = 'custo'; $env:B05FAKE_CUSTO = '"caro"'
 $r4 = Controlador-Chamar $a4
 Remove-Item Env:B05FAKE_MODO,Env:B05FAKE_CUSTO -EA SilentlyContinue
 $limpa = [string]::IsNullOrWhiteSpace((& git -C $a4.Repo status --porcelain))
-Checar 'C4: claude-ponte devolveu 28 (financeiro)' ($r4.Codigo -eq 28) "cod=$($r4.Codigo) saida=$($r4.Saida)"
-Checar 'C4: NAO comitou; HEAD=base (rollback)' (-not $r4.Commitou -and $r4.HeadAgora -eq $r4.HeadBase)
-Checar 'C4: arvore limpa apos rollback (C-03)' ($limpa)
-Checar 'C4: trava FINANCEIRA gravada (C-02)' ([bool](Get-ChildItem $a4.Trava -Filter 'financeira-*.trava' -EA SilentlyContinue))
+Checar 'M-CUSTO: claude-ponte devolveu 28 (financeiro)' ($r4.Codigo -eq 28) "cod=$($r4.Codigo) saida=$($r4.Saida)"
+Checar 'M-CUSTO: NAO comitou; HEAD=base (rollback)' (-not $r4.Commitou -and $r4.HeadAgora -eq $r4.HeadBase)
+Checar 'M-CUSTO: arvore limpa apos rollback (C-03)' ($limpa)
+Checar 'M-CUSTO: trava FINANCEIRA gravada (C-02)' ([bool](Get-ChildItem $a4.Trava -Filter 'financeira-*.trava' -EA SilentlyContinue))
 
 # ---------- C6: controlador morto -> lease de PE orfao VIVO -> pre-flight encerra antes de despachar ----------
-"== C6 (REQ-12/R-01 V1): PE orfao VIVO de execucao anterior -> pre-flight da ponte encerra ANTES de despachar"
+"== M-ORFAO (REQ-12/R-01 V1, controlador MINIMO): PE orfao VIVO de execucao anterior -> pre-flight da ponte encerra ANTES de despachar"
 $a6 = Novo-Ambiente
 $orf = [System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName=$env:ComSpec; Arguments='/c ping -n 60 127.0.0.1 > nul'; UseShellExecute=$false; CreateNoWindow=$true }))
 $orfPid = [uint32]$orf.Id; $orfCri = 0L; try { $orfCri = [B05LowIL]::CriacaoUtc($orf.Handle) } catch {}
@@ -120,9 +120,9 @@ Remove-Item Env:B05FAKE_MODO -EA SilentlyContinue
 Start-Sleep -Milliseconds 400
 $mortoDepois = (PU-Subarvore-Morta $orfPid $orfCri).Morta
 try { if (-not $orf.HasExited) { $orf.Kill($true) } } catch {}
-Checar 'C6: orfao estava VIVO antes da chamada' ($vivoAntes)
-Checar 'C6: pre-flight encerrou o orfao (morto depois)' ($mortoDepois)
-Checar 'C6: chamada subsequente prosseguiu (claude-ponte 0)' ($r6.Codigo -eq 0) "cod=$($r6.Codigo)"
+Checar 'M-ORFAO: orfao estava VIVO antes da chamada' ($vivoAntes)
+Checar 'M-ORFAO: pre-flight encerrou o orfao (morto depois)' ($mortoDepois)
+Checar 'M-ORFAO: chamada subsequente prosseguiu (claude-ponte 0)' ($r6.Codigo -eq 0) "cod=$($r6.Codigo)"
 
 "`nTOTAL INTEGRA: $ok / $tot"
 exit ([int]($ok -ne $tot))
