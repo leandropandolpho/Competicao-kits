@@ -23,7 +23,10 @@ if (-not $IsWindows) { "LANCADOR: so Windows."; exit 0 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { "LANCADOR: git ausente - pulado."; exit 0 }
 
 function Novo-Amb([string]$testeReal='exit 0') {
-  $base = Join-Path $env:TEMP ('lan-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+  # Raiz dos ambientes: TEMP por padrao; B05_LAN_BASE permite apontar para uma pasta inspecionavel (ex.: pasta conectada),
+  # util para auditar os artefatos do teste (estado/log.jsonl, razao) sem depender de acesso ao TEMP.
+  $raizBase = if ($env:B05_LAN_BASE) { $env:B05_LAN_BASE } else { $env:TEMP }
+  $base = Join-Path $raizBase ('lan-' + [guid]::NewGuid().ToString('N').Substring(0,8))
   $repo = Join-Path $base 'repo'; $ctrl = Join-Path $base 'ctrl'; $estado = Join-Path $base 'estado'
   New-Item -ItemType Directory -Force $repo,$ctrl,$estado | Out-Null
   Push-Location $repo
