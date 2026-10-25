@@ -54,7 +54,8 @@ function Rodar-Lancador($amb,[string]$modo,[int]$tmoCtrl=180,[int]$tmoPonte=60,[
   if ($Bg) { return @{ Proc=$p; HeadBase=$headBase; OutT=$outT; ErrT=$errT } }
   $estourou = -not $p.WaitForExit(($tmoCtrl+90)*1000)
   if ($estourou) { try { $p.Kill($true) } catch {} }
-  return @{ Codigo=(if($estourou){-1}else{$p.ExitCode}); HeadBase=$headBase; HeadAgora=(& git -C $amb.Repo rev-parse HEAD).Trim(); Saida=$outT.Result; Erro=$errT.Result }
+  $cod = if ($estourou) { -1 } else { $p.ExitCode }
+  return @{ Codigo=$cod; HeadBase=$headBase; HeadAgora=(& git -C $amb.Repo rev-parse HEAD).Trim(); Saida=$outT.Result; Erro=$errT.Result }
 }
 $testeReal_ = 'exit 0'
 function Custo($amb) { $r = Razao-Ler $amb.Ctrl; if (-not $r.Ok) { return -1 }; (Razao-Contabilizar $r.Eventos 0.25).Total }
