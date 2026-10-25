@@ -20,6 +20,9 @@ $esperado = [ordered]@{
   "$pe\despachante-teste.ps1"     = '48A1263145F7BE3F2DFE24090B1452A4707133A33D33EF4ADF8980E996FD24C5'
   "$tst\testar-controlador-real-ponte.ps1" = '6692DE8B7DDF699E123A73D053D46FB320EC9198D87FC863344F4BACACD3ECE8'
   "$tst\testar-lancador-ponte.ps1"          = 'ADFE46BF692EA9ABFAEC1576C609761F8066FC25D52A489947AC02BBF0826918'
+  "$tst\testar-pe.ps1"                      = '49D9E2B7383185AA06895C6532B8A4D7BE1DEFA3F8F5B30AE3981FBCDE85AB62'
+  "$tst\testar-ponte-pu.ps1"                = '07CCB11FCEF9A19E03DEFB15A4B16C1F64AEC9B3139B7BD75459094E7D8D6EBA'
+  "$tst\testar-integra-ponte.ps1"           = '480ED33377171A40B7D9D587C63982B1006C5B524E383F7CE5FFDDE6F7E814E7'
   "$pe\ponte-pu.ps1"              = 'FC262DC947F4DDC3D55C2FE569F5AAF421F55C24C27BDBD0EFFBA2D8EF41B6A4'
   "$pe\acao-pe.ps1"              = '5159B36084B82782AA9BF0E141A99FC7D10BB82628E4D3852628675FB9031A62'
   "$nuc\b05job.ps1"              = 'C84D41969DE097F9EA04D9C11C6E126651E22C89CFD2A735439EB6CCA525D0FA'
@@ -42,7 +45,7 @@ if (-not $integro) {
   [IO.File]::WriteAllText($out, ($L -join "`r`n"), [Text.UTF8Encoding]::new($false))
   Write-Host "RESULTADO: $out"; exit 2
 }
-Linha "--- integridade da entrega: OK (11/11) ---"
+Linha ("--- integridade da entrega: OK ({0}/{0}) ---" -f $esperado.Count)
 
 $baterias = [ordered]@{
   'PE'              = (Join-Path $tst 'testar-pe.ps1')
