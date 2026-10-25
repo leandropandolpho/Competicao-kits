@@ -189,3 +189,23 @@ que c980c2f seja preservado imutável. Candidata 4 = NOVO commit sobre c980c2f (
 - CORREÇÃO DE REGISTRO (honestidade documental): no Ato 148 constou que a Perplexity "prova RC-6b". A Perplexity
   esclareceu (Ato 149) que ESCREVEU, mas NÃO executou o RC-6b. A prova de execução de RC-6b/PU-11b/C6-real passa a ser a
   deste pacote (candidata 4, bateria real no Windows), não a da Perplexity.
+
+## 12. Ato 151 (Perplexity) — binário aprovado e CONGELAMENTO da candidata 4 (129/129)
+Causa raiz do PE 33/40 nas rodadas pela GUI (isolada pela Perplexity, Ato 151): a bateria rodava sob o pwsh da
+Microsoft Store (MSIX, em C:\...\WindowsApps\...), não o pwsh PORTÁTIL aprovado. Um app MSIX roda num Job de
+app-container (com SILENT_BREAKAWAY_OK), o que deixa o neto do executor ESCAPAR do Job e sobreviver ao teardown —
+exatamente as 7 falhas de reaping (PE-R4a/b/c, PE-L). Não era regressão de código: `acao-pe`/`b05job` seguem com
+diff VAZIO. Comprovado: o pwsh portátil e o MSIX têm o MESMO SHA-256 (FA2C8BB1…E9E9619); a diferença é só o
+contêiner de execução.
+- Correção (só em componentes NÃO congelados — runner e bootstrap): o runner (roda-cand4) passou a EXIGIR, antes de
+  qualquer bateria, que (Get-Process -Id $PID).Path seja o pwsh portátil aprovado
+  (C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe) e que o SHA-256 seja FA2C8BB1…E9E9619 — senão FATAL
+  (exit 3). Registra no resultado caminho/versão/SHA/msix e o diagnóstico de Job (IsProcessInJob +
+  QueryInformationJobObject). O bootstrap chama o portátil por caminho completo.
+- Evidência do binário aprovado (resultado 20261025-122017): `pwsh_msix=False`; `job: em_job=True flags=0x0`
+  (SEM SILENT_BREAKAWAY, SEM KILL_ON_CLOSE no Job externo) — contexto limpo para o reaping aninhado.
+- CONGELAMENTO CANDIDATA 4 — matriz real sob o binário aprovado: **PE 40/40 · PU 39/39 · INTEGRA 13/13 ·
+  CONTROLADOR-REAL 18/18 · LANCADOR 19/19 = 129/129, EXITCODE 0, "TODAS VERDES"**. Integridade de entrega 14/14.
+  c980c2f (candidata 3) preservado como ancestral imutável. Congelados intactos (diff VAZIO): controlador 7cd7864,
+  claude-com-teto 9e6991c, supervisora 6b45dea, lancador.ps1 e núcleo B-05. Bloqueios mantidos: deploy, V2,
+  provisionamento, cobrança, execução desassistida; R1/B-07/aprovação humana.
