@@ -41,12 +41,32 @@ $acao     = Join-Path $raizPe 'acao-pe.ps1'
 $ponte = Join-Path $CtrlDir 'ponte'; $evid = Join-Path $CtrlDir 'evid'; $trava = Join-Path $CtrlDir 'trava'
 New-Item -ItemType Directory -Force $CtrlDir,$EstadoDir,$ponte,$evid,$trava | Out-Null
 
-# hashes_nucleo OBRIGATORIOS (R-04): o lancador e quem ESTABELECE a identidade confiavel do nucleo nesta execucao.
+# --- C4-F02 (Ato 153, ChatGPT+Perplexity): GATE do binario pwsh aprovado no proprio lancador, ANTES de qualquer
+# despacho. Hoje o lancador recebia PwshPortatil e so calculava o SHA; agora EXIGE caminho canonico + SHA aprovado e
+# RECUSA execucao MSIX (WindowsApps = Job de app-container). A restricao deixa de valer so no runner de testes.
+$PWSH_SHA_APROVADO = 'FA2C8BB1E35CDD62AD15CD06A1D8F2C5961E9725A9BFA1E7CFD2C322F49E9619'
+if (-not (Test-Path -LiteralPath $PwshPortatil)) { [Console]::Error.Write("C4-F02: pwsh aprovado inexistente: $PwshPortatil"); exit 31 }
+if ("$PwshPortatil" -like '*\WindowsApps\*') { [Console]::Error.Write("C4-F02: pwsh MSIX (WindowsApps) recusado: $PwshPortatil"); exit 31 }
+$shaPwshReal = (Get-FileHash -LiteralPath $PwshPortatil -Algorithm SHA256).Hash.ToUpper()
+if ($shaPwshReal -ne $PWSH_SHA_APROVADO) { [Console]::Error.Write("C4-F02: SHA do pwsh diverge do aprovado (real=$shaPwshReal)"); exit 31 }
+
+# --- C4-F03 (Ato 153): ANCORA DE CONFIANCA. Os hashes do nucleo NAO sao apenas calculados dos arquivos do runtime: sao
+# conferidos contra um MANIFESTO APROVADO e protegido (hashes-nucleo-aprovado.json). Se a origem foi adulterada antes do
+# calculo, o runtime nao baterá com o manifesto aprovado => FATAL (97). A config passa a carregar os valores APROVADOS.
 $mapaNucleo = [ordered]@{ 'ponte-pu.ps1'=(Join-Path $raizPe 'ponte-pu.ps1'); 'acao-pe.ps1'=$acao
   'b05job.ps1'=(Join-Path $raizPe '..\b05job.ps1'); 'baixa-integridade.ps1'=(Join-Path $raizPe '..\baixa-integridade.ps1')
   'razao.ps1'=(Join-Path $raizPe '..\razao.ps1') }
+$manifestoAprov = if ($env:B05_MANIFESTO_NUCLEO) { $env:B05_MANIFESTO_NUCLEO } else { Join-Path $raizPe 'hashes-nucleo-aprovado.json' }
+if (-not (Test-Path -LiteralPath $manifestoAprov)) { [Console]::Error.Write("C4-F03: manifesto aprovado ausente: $manifestoAprov"); exit 97 }
+try { $aprov = Get-Content -LiteralPath $manifestoAprov -Raw -Encoding utf8 | ConvertFrom-Json } catch { [Console]::Error.Write("C4-F03: manifesto aprovado ilegivel"); exit 97 }
 $hashes = [ordered]@{}
-foreach ($k in $mapaNucleo.Keys) { $hashes[$k] = (Get-FileHash -LiteralPath $mapaNucleo[$k] -Algorithm SHA256).Hash }
+foreach ($k in $mapaNucleo.Keys) {
+  if (-not $aprov.PSObject.Properties[$k]) { [Console]::Error.Write("C4-F03: manifesto aprovado nao cobre $k"); exit 97 }
+  $esp = "$($aprov.$k)".ToUpper()
+  $real = (Get-FileHash -LiteralPath $mapaNucleo[$k] -Algorithm SHA256).Hash.ToUpper()
+  if ($real -ne $esp) { [Console]::Error.Write("C4-F03: nucleo $k diverge do manifesto aprovado (real=$real)"); exit 97 }
+  $hashes[$k] = $esp
+}
 
 # REQ-12(1)/R-05: o prazo da ponte + margem precisa caber no TimeoutSec do controlador.
 if (($TimeoutPonteSeg + 35) -gt $TimeoutControladorSeg) { [Console]::Error.Write("R-05: TimeoutPonteSeg($TimeoutPonteSeg)+35 > TimeoutControladorSeg($TimeoutControladorSeg)"); exit 29 }

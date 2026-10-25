@@ -42,15 +42,17 @@ function Novo-Amb([string]$testeReal='exit 0') {
   return [pscustomobject]@{ Base=$base; Repo=$repo; Ctrl=$ctrl; Estado=$estado; Taref=$taref; Trava=(Join-Path $ctrl 'trava') }
 }
 # Sobe o lancador. Devolve o Process (vivo se bg) + head base. $Bg=$true nao espera (para o C6 matar no meio).
-function Rodar-Lancador($amb,[string]$modo,[int]$tmoCtrl=180,[int]$tmoPonte=60,[int]$maxTent=2,[switch]$Bg) {
+function Rodar-Lancador($amb,[string]$modo,[int]$tmoCtrl=180,[int]$tmoPonte=60,[int]$maxTent=2,[switch]$Bg,[string]$PwshOverride,[string]$ManifestoOverride) {
   $headBase = (& git -C $amb.Repo rev-parse HEAD).Trim()
+  $pwUsar = if ($PwshOverride) { $PwshOverride } else { $Pw }
   $psi = [System.Diagnostics.ProcessStartInfo]::new($Pw)
   foreach ($a in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$lanPs1,
       '-RepoPath',$amb.Repo,'-CtrlDir',$amb.Ctrl,'-EstadoDir',$amb.Estado,'-TarefasPath',$amb.Taref,
-      '-Controlador',$ctrlPath,'-TesteReal',$testeReal_,'-PwshPortatil',$Pw,
+      '-Controlador',$ctrlPath,'-TesteReal',$testeReal_,'-PwshPortatil',$pwUsar,
       '-TimeoutControladorSeg',[string]$tmoCtrl,'-TimeoutPonteSeg',[string]$tmoPonte,'-MaxTentativas',[string]$maxTent)) { $psi.ArgumentList.Add($a) }
   $psi.UseShellExecute=$false; $psi.RedirectStandardOutput=$true; $psi.RedirectStandardError=$true; $psi.WorkingDirectory=$amb.Repo
   $psi.Environment['B05FAKE_MODO']=$modo
+  if ($ManifestoOverride) { $psi.Environment['B05_MANIFESTO_NUCLEO']=$ManifestoOverride }
   $psi.Environment['PATH']=(Split-Path $Pw) + ';' + $psi.Environment['PATH']
   $p=[System.Diagnostics.Process]::Start($psi)
   $outT=$p.StandardOutput.ReadToEndAsync(); $errT=$p.StandardError.ReadToEndAsync()
@@ -83,6 +85,24 @@ $rTRV = Rodar-Lancador $aTRV 'ok:0.20'
 Checar 'L-TRV: lancador recusou subir, preservando 28 (financeira)' ($rTRV.Codigo -eq 28) "cod=$($rTRV.Codigo)"
 Checar 'L-TRV: controlador NAO comitou (HEAD=base)' ($rTRV.HeadAgora -eq $rTRV.HeadBase)
 Checar 'L-TRV: EstadoDir vazio (controlador nem iniciou)' (@(Get-ChildItem -LiteralPath $aTRV.Estado -EA SilentlyContinue).Count -eq 0)
+
+"== L-PWSH (C4-F02, Ato 153): lancador com pwsh NAO aprovado (SHA diverge) -> recusa (31), controlador NAO sobe"
+$aPW = Novo-Amb
+$rPW = Rodar-Lancador $aPW 'ok:0.20' -PwshOverride $env:ComSpec   # cmd.exe: existe, nao-MSIX, SHA != aprovado
+Checar 'L-PWSH: pwsh nao aprovado -> exit 31' ($rPW.Codigo -eq 31) "cod=$($rPW.Codigo) err=$($rPW.Erro)"
+Checar 'L-PWSH: controlador NAO comitou (HEAD=base)' ($rPW.HeadAgora -eq $rPW.HeadBase)
+Checar 'L-PWSH: EstadoDir vazio (nem iniciou)' (@(Get-ChildItem -LiteralPath $aPW.Estado -EA SilentlyContinue).Count -eq 0)
+
+"== L-MANIF (C4-F03, Ato 153): nucleo diverge do MANIFESTO APROVADO -> FATAL (97), controlador NAO sobe"
+$aMN = Novo-Amb
+$manifReal = (Resolve-Path (Join-Path $raiz '..\hashes-nucleo-aprovado.json')).Path
+$manObj = Get-Content -LiteralPath $manifReal -Raw | ConvertFrom-Json
+$manObj.'razao.ps1' = '0000000000000000000000000000000000000000000000000000000000000000'   # força divergência
+$manBad = Join-Path $aMN.Base 'manifesto-divergente.json'
+[IO.File]::WriteAllText($manBad, ($manObj | ConvertTo-Json -Depth 5), $Utf8)
+$rMN = Rodar-Lancador $aMN 'ok:0.20' -ManifestoOverride $manBad
+Checar 'L-MANIF: nucleo diverge do manifesto aprovado -> exit 97' ($rMN.Codigo -eq 97) "cod=$($rMN.Codigo) err=$($rMN.Erro)"
+Checar 'L-MANIF: controlador NAO comitou (HEAD=base)' ($rMN.HeadAgora -eq $rMN.HeadBase)
 
 "== PU-11b: lease de SUBARVORE VIVA -> lancador sai 22, controlador NAO sobe, sem git/rollback"
 $aLV = Novo-Amb
@@ -129,6 +149,11 @@ $leaseRemanesc = (LeasesVivos $aC6) -ge 1
 Checar 'C6-real: PE chegou a executar (lease vivo gravado antes da morte)' ($entrou)
 Checar 'C6-real: morte abrupta NAO deixou commit (HEAD=base)' ($headPosMorte -eq $bg.HeadBase)
 Checar 'C6-real: subarvore do PE confirmada MORTA e lease remanescente p/ a retomada conferir' ($reapados -ge 1 -and $leaseRemanesc)
+# C6-complemento (ChatGPT Ato 153): confirmar que T1 estava in_progress NO momento da morte (ler ANTES da retomada
+# sobrescrever o TAREFAS.json). Prova que a interrupcao atingiu uma tarefa de fato em andamento.
+$docMorte = try { Get-Content -LiteralPath $aC6.Taref -Raw | ConvertFrom-Json } catch { $null }
+$t1Morte = if ($docMorte) { @($docMorte.tarefas | Where-Object { $_.id -eq 'T1' })[0] } else { $null }
+Checar 'C6-real: T1 estava in_progress na morte (tentativas>=1)' ($t1Morte -and "$($t1Morte.status)" -eq 'in_progress' -and [int]$t1Morte.tentativas -ge 1) "status=$($t1Morte.status) tent=$($t1Morte.tentativas)"
 # 2a subida: o pre-flight confere a morte do lease (subarvore morta), limpa e o controlador RETOMA a T1. A invariante de
 # R-01/RC-6b e a SEGURANCA da retomada, nao uma liveness obrigatoria: ou o despacho conclui limpo e commita, OU o despacho
 # fica indeterminado (race morte/fim.flag em HW restrito) e o controlador FAIL-CLOSE (D-06 c: reserva mantida, SEM commit).
@@ -143,6 +168,15 @@ $t1C6 = @($docC6.tarefas | Where-Object { $_.id -eq 'T1' })[0]
 Checar 'C6-real: tarefa em estado TERMINAL (done/failed), nunca presa em in_progress' ("$($t1C6.status)" -in @('done','failed')) "status=$($t1C6.status)"
 Checar 'C6-real: lease morto foi limpo no pre-flight (sem lease ao fim)' ((LeasesVivos $aC6) -eq 0)
 Checar 'C6-real: custo do razao preservado (> 0 apos retomada; reserva mantida se fail-close)' ((Custo $aC6) -gt 0) "custo=$(Custo $aC6)"
+# C6-complemento: integridade do estado Git apos a retomada (ChatGPT Ato 153).
+$arvoreLimpa = [string]::IsNullOrWhiteSpace((& git -C $aC6.Repo status --porcelain))
+Checar 'C6-real: arvore de trabalho LIMPA apos a retomada (sem resto nao-commitado)' ($arvoreLimpa)
+if ($commitLimpo) {
+  $temNotas = (@(& git -C $aC6.Repo ls-tree -r --name-only HEAD) -contains 'notas.txt')
+  Checar 'C6-real: commit limpo -> conteudo integro (notas.txt no HEAD, criado pela retomada)' ($temNotas)
+} else {
+  Checar 'C6-real: fail-close -> SEM commit (HEAD=base) e reserva mantida no razao' (($rC6b.HeadAgora -eq $bg.HeadBase) -and ((Custo $aC6) -gt 0))
+}
 
 "`nTOTAL LANCADOR: $ok / $tot"
 exit ([int]($ok -ne $tot))
