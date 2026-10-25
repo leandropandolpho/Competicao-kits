@@ -22,7 +22,11 @@ param(
   [int]$TimeoutPonteSeg = 60,
   [int]$MaxTentativas = 1,
   [double]$Teto = 0.5, [double]$Folga = 0.25, [double]$Orcamento = 100,
-  [string]$ExecId
+  [string]$ExecId,
+  # Executor real: parametrizado (nao embutido). Default = fake-executor para a BATERIA V1; a operacao real passaria o
+  # claude (BLOQUEADA ate decisao de provisionamento). Mantem o lancador generico, sem assumir o fake como operacional.
+  [string]$Executor,
+  [string]$ExecutorPrefixo
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
@@ -48,8 +52,10 @@ foreach ($k in $mapaNucleo.Keys) { $hashes[$k] = (Get-FileHash -LiteralPath $map
 if (($TimeoutPonteSeg + 35) -gt $TimeoutControladorSeg) { [Console]::Error.Write("R-05: TimeoutPonteSeg($TimeoutPonteSeg)+35 > TimeoutControladorSeg($TimeoutControladorSeg)"); exit 29 }
 
 if (-not $ExecId) { $ExecId = [guid]::NewGuid().ToString('N') }
+$execBin = if ($Executor) { $Executor } else { $PwshPortatil }
+$execPref = if ($ExecutorPrefixo) { $ExecutorPrefixo } else { "-NoProfile|-File|$(Join-Path $raizPe '..\testes\fake-executor.ps1')" }
 $cfg = [ordered]@{ execucao=$ExecId; teto_chamada_usd=$Teto; folga=$Folga; orcamento_usd=$Orcamento
-  executor=$PwshPortatil; executor_prefixo="-NoProfile|-File|$(Join-Path $raizPe '..\testes\fake-executor.ps1')"
+  executor=$execBin; executor_prefixo=$execPref
   test_cmd_real=$TesteReal; ponte_dir=$ponte; acao_pe=$acao; pwsh_aprovado=$PwshPortatil
   pwsh_sha256=(Get-FileHash -LiteralPath $PwshPortatil -Algorithm SHA256).Hash
   trava_dir=$trava; evidencia_dir=$evid; timeout_ponte_seg=$TimeoutPonteSeg; timeout_controlador_seg=$TimeoutControladorSeg
@@ -63,9 +69,12 @@ Set-ItemProperty -LiteralPath $arqCfg -Name IsReadOnly -Value $true
 # Nucleo (ja hasheado acima; confiavel) para o PRE-FLIGHT anti-orfao.
 . (Join-Path $raizPe 'ponte-pu.ps1')
 
-# (c) trava persistente primeiro (fail-closed)
+# (c) trava persistente primeiro (fail-closed). Preserva a semantica D-06: financeira=>28, seguranca=>70, senao 26.
 $tv = PU-Trava-Ativa $trava
-if ($tv.Ativa) { [Console]::Error.Write("lancador: trava persistente ativa ($($tv.Tipo)) - nao sobe. $($tv.Detalhe)"); exit 26 }
+if ($tv.Ativa) {
+  $codTrava = switch ("$($tv.Tipo)") { 'financeira' { 28 } 'seguranca' { 70 } default { 26 } }
+  [Console]::Error.Write("lancador: trava persistente ativa ($($tv.Tipo)) - nao sobe (exit $codTrava). $($tv.Detalhe)"); exit $codTrava
+}
 
 # (b) R-01: PRE-FLIGHT ANTI-ORFAO antes de subir/retomar. Lease de subarvore VIVA => NAO sobe (22). Lease morto => limpa.
 if (Test-Path -LiteralPath $trava) {

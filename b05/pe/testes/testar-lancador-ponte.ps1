@@ -76,7 +76,7 @@ $aTRV = Novo-Amb
 New-Item -ItemType Directory -Force $aTRV.Trava | Out-Null
 PU-Gravar-Trava $aTRV.Trava 'financeira' 'teste L-TRV' 'exec-x'
 $rTRV = Rodar-Lancador $aTRV 'ok:0.20'
-Checar 'L-TRV: lancador recusou subir (exit 26)' ($rTRV.Codigo -eq 26) "cod=$($rTRV.Codigo)"
+Checar 'L-TRV: lancador recusou subir, preservando 28 (financeira)' ($rTRV.Codigo -eq 28) "cod=$($rTRV.Codigo)"
 Checar 'L-TRV: controlador NAO comitou (HEAD=base)' ($rTRV.HeadAgora -eq $rTRV.HeadBase)
 Checar 'L-TRV: EstadoDir vazio (controlador nem iniciou)' (@(Get-ChildItem -LiteralPath $aTRV.Estado -EA SilentlyContinue).Count -eq 0)
 
@@ -96,21 +96,36 @@ Checar 'PU-11b: arquivo nao-rastreado PRESERVADO (nenhum git reset ocorreu)' (Te
 Checar 'PU-11b: EstadoDir vazio (controlador nem iniciou)' (@(Get-ChildItem -LiteralPath $aLV.Estado -EA SilentlyContinue).Count -eq 0)
 Checar 'PU-11b: lease do vivo NAO foi removido (nao limpa lease vivo)' ($vivoAindaMarcado)
 
+# Encerra, de forma DETERMINISTICA, a subarvore de cada lease remanescente (nao depende do taskkill /T alcancar o PE do
+# Job Object) e confirma a morte antes de prosseguir. Devolve o nro de leases cuja subarvore ficou comprovadamente morta.
+function Reapar-Leases($amb) {
+  $mortos = 0
+  foreach ($lf in @(Get-ChildItem -LiteralPath $amb.Trava -Filter '*.lease' -EA SilentlyContinue)) {
+    try { $ls = Get-Content -LiteralPath $lf.FullName -Raw | ConvertFrom-Json } catch { continue }
+    try { & taskkill /PID ([int]$ls.pid) /T /F *>$null } catch {}
+    try { PU-Encerrar-Subarvore ([uint32]$ls.pid) ([long]$ls.criacao) | Out-Null } catch {}
+    Start-Sleep -Milliseconds 500
+    if ((PU-Subarvore-Morta ([uint32]$ls.pid) ([long]$ls.criacao)).Morta) { $mortos++ }
+  }
+  return $mortos
+}
+
 "== C6-real: encerramento ABRUPTO em tarefa in_progress -> nenhum commit; 2o lancador retoma apos liberacao segura -> commit"
 $aC6 = Novo-Amb
-$bg = Rodar-Lancador $aC6 'dorme:30' 180 60 2 -Bg
-# espera o PE entrar em execucao (lease vivo gravado pela ponte em N-08) - ate ~20s
+$bg = Rodar-Lancador $aC6 'dorme:99' 180 60 2 -Bg
+# espera o PE entrar em execucao (lease vivo gravado pela ponte em N-08) - ate ~25s
 $entrou = $false
-for ($i=0; $i -lt 40; $i++) { Start-Sleep -Milliseconds 500; if ((Test-Path $aC6.Trava) -and (LeasesVivos $aC6) -ge 1) { $entrou = $true; break } }
-# mata a ARVORE do lancador (lancador->controlador->claude-ponte->acao-pe->executor): morte abrupta mid in_progress
+for ($i=0; $i -lt 50; $i++) { Start-Sleep -Milliseconds 500; if ((Test-Path $aC6.Trava) -and (LeasesVivos $aC6) -ge 1) { $entrou = $true; break } }
+# morte ABRUPTA: mata a arvore do lancador E garante a morte da subarvore do PE do Job (determinismo, nao depende do /T).
 try { & taskkill /PID $bg.Proc.Id /T /F *>$null } catch {}
 try { $bg.Proc.WaitForExit(10000) | Out-Null } catch {}
+$reapados = Reapar-Leases $aC6
 $headPosMorte = (& git -C $aC6.Repo rev-parse HEAD).Trim()
 $leaseRemanesc = (LeasesVivos $aC6) -ge 1
 Checar 'C6-real: PE chegou a executar (lease vivo gravado antes da morte)' ($entrou)
 Checar 'C6-real: morte abrupta NAO deixou commit (HEAD=base)' ($headPosMorte -eq $bg.HeadBase)
-Checar 'C6-real: lease do PE morto remanescente no trava (a ser conferido na retomada)' ($leaseRemanesc)
-# 2a subida: pre-flight confere a morte do lease, limpa, e o controlador RETOMA a T1 -> commit
+Checar 'C6-real: subarvore do PE confirmada MORTA e lease remanescente p/ a retomada conferir' ($reapados -ge 1 -and $leaseRemanesc)
+# 2a subida: pre-flight confere a morte do lease (subarvore morta), limpa, e o controlador RETOMA a T1 -> commit
 Start-Sleep -Seconds 1
 $rC6b = Rodar-Lancador $aC6 'ok:0.20' 180 60 3
 Checar 'C6-real: 2o lancador retomou e saiu 0 (done)' ($rC6b.Codigo -eq 0) "cod=$($rC6b.Codigo) err=$($rC6b.Erro)"
