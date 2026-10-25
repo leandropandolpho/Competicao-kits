@@ -1,0 +1,96 @@
+# lancador-ponte.ps1 - Lancador do modo PRINCIPAL-ISOLADO (R-01 / D-1 / REQ-12). gate-pe. Ato 150.
+# Resolve o achado do ChatGPT (Ato 149): nao existia procedimento definido para INICIAR o controlador no modo ponte
+# ("quem invoca passa ClaudeCmd/TestCmd" era o que o harness fazia a mao). Este lancador e EXTERNO e ADITIVO: NAO toca
+# controlador (7cd7864), claude-com-teto (9e6991c), supervisora (6b45dea), lancador.ps1 nem o nucleo B-05.
+# Faz, ANTES de subir/retomar o controlador:
+#  (a) grava a config imutavel da execucao (CreateNew + somente-leitura) com hashes_nucleo OBRIGATORIOS (R-04), o
+#      TestCmd fixo (despachante), timeout_controlador_seg (R-05) e os caminhos do PU fora do repo;
+#  (b) PRE-FLIGHT ANTI-ORFAO (R-01): se houver lease de execucao anterior com subarvore VIVA, NAO sobe o controlador e
+#      sai 22 - impede qualquer git/rollback enquanto um PE anterior puder escrever (fail-closed). Lease morto e limpo.
+#  (c) confere trava persistente (financeira 28 / seguranca 70) e o prazo (REQ-12(1)).
+# So entao sobe o controlador real com -ClaudeCmd claude-ponte.cmd e -TestCmd despachante-teste.cmd.
+param(
+  [Parameter(Mandatory)][string]$RepoPath,
+  [Parameter(Mandatory)][string]$CtrlDir,          # B05_DIR: config-<exec>.json + razao.jsonl (FORA do repo)
+  [Parameter(Mandatory)][string]$EstadoDir,
+  [Parameter(Mandatory)][string]$TarefasPath,
+  [Parameter(Mandatory)][string]$Controlador,      # controlador.ps1 real (7cd7864)
+  [Parameter(Mandatory)][string]$TesteReal,        # comando de teste real (vai para config.test_cmd_real)
+  [Parameter(Mandatory)][string]$PwshPortatil,     # pwsh aprovado (B05_PWSH)
+  [string]$TestPaths = 'teste-marker.txt',
+  [int]$TimeoutControladorSeg = 180,
+  [int]$TimeoutPonteSeg = 60,
+  [int]$MaxTentativas = 1,
+  [double]$Teto = 0.5, [double]$Folga = 0.25, [double]$Orcamento = 100,
+  [string]$ExecId
+)
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version 3.0
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$Utf8 = [System.Text.UTF8Encoding]::new($false)
+$raizPe = $PSScriptRoot
+$pontecmd = Join-Path $raizPe 'claude-ponte.cmd'
+$despcmd  = Join-Path $raizPe 'despachante-teste.cmd'
+$acao     = Join-Path $raizPe 'acao-pe.ps1'
+
+# Pastas do PU FORA do repo (irmas do CtrlDir)
+$ponte = Join-Path $CtrlDir 'ponte'; $evid = Join-Path $CtrlDir 'evid'; $trava = Join-Path $CtrlDir 'trava'
+New-Item -ItemType Directory -Force $CtrlDir,$EstadoDir,$ponte,$evid,$trava | Out-Null
+
+# hashes_nucleo OBRIGATORIOS (R-04): o lancador e quem ESTABELECE a identidade confiavel do nucleo nesta execucao.
+$mapaNucleo = [ordered]@{ 'ponte-pu.ps1'=(Join-Path $raizPe 'ponte-pu.ps1'); 'acao-pe.ps1'=$acao
+  'b05job.ps1'=(Join-Path $raizPe '..\b05job.ps1'); 'baixa-integridade.ps1'=(Join-Path $raizPe '..\baixa-integridade.ps1')
+  'razao.ps1'=(Join-Path $raizPe '..\razao.ps1') }
+$hashes = [ordered]@{}
+foreach ($k in $mapaNucleo.Keys) { $hashes[$k] = (Get-FileHash -LiteralPath $mapaNucleo[$k] -Algorithm SHA256).Hash }
+
+# REQ-12(1)/R-05: o prazo da ponte + margem precisa caber no TimeoutSec do controlador.
+if (($TimeoutPonteSeg + 35) -gt $TimeoutControladorSeg) { [Console]::Error.Write("R-05: TimeoutPonteSeg($TimeoutPonteSeg)+35 > TimeoutControladorSeg($TimeoutControladorSeg)"); exit 29 }
+
+if (-not $ExecId) { $ExecId = [guid]::NewGuid().ToString('N') }
+$cfg = [ordered]@{ execucao=$ExecId; teto_chamada_usd=$Teto; folga=$Folga; orcamento_usd=$Orcamento
+  executor=$PwshPortatil; executor_prefixo="-NoProfile|-File|$(Join-Path $raizPe '..\testes\fake-executor.ps1')"
+  test_cmd_real=$TesteReal; ponte_dir=$ponte; acao_pe=$acao; pwsh_aprovado=$PwshPortatil
+  pwsh_sha256=(Get-FileHash -LiteralPath $PwshPortatil -Algorithm SHA256).Hash
+  trava_dir=$trava; evidencia_dir=$evid; timeout_ponte_seg=$TimeoutPonteSeg; timeout_controlador_seg=$TimeoutControladorSeg
+  hashes_nucleo=$hashes }
+$arqCfg = Join-Path $CtrlDir "config-$ExecId.json"
+# Config imutavel: CreateNew (recusa sobrescrita) + somente-leitura.
+$fsCfg = [System.IO.FileStream]::new($arqCfg, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write)
+try { $b = $Utf8.GetBytes(($cfg | ConvertTo-Json -Depth 8)); $fsCfg.Write($b,0,$b.Length) } finally { $fsCfg.Dispose() }
+Set-ItemProperty -LiteralPath $arqCfg -Name IsReadOnly -Value $true
+
+# Nucleo (ja hasheado acima; confiavel) para o PRE-FLIGHT anti-orfao.
+. (Join-Path $raizPe 'ponte-pu.ps1')
+
+# (c) trava persistente primeiro (fail-closed)
+$tv = PU-Trava-Ativa $trava
+if ($tv.Ativa) { [Console]::Error.Write("lancador: trava persistente ativa ($($tv.Tipo)) - nao sobe. $($tv.Detalhe)"); exit 26 }
+
+# (b) R-01: PRE-FLIGHT ANTI-ORFAO antes de subir/retomar. Lease de subarvore VIVA => NAO sobe (22). Lease morto => limpa.
+if (Test-Path -LiteralPath $trava) {
+  try { $leases = @(Get-ChildItem -LiteralPath $trava -Filter '*.lease' -ErrorAction Stop) }
+  catch { [Console]::Error.Write("R-01: listagem de leases falhou (fail-closed): $($_.Exception.Message)"); exit 22 }
+  foreach ($lf in $leases) {
+    try { $ls = Get-Content -LiteralPath $lf.FullName -Raw | ConvertFrom-Json } catch { [Console]::Error.Write("R-01: lease ilegivel ($($lf.Name)) - fail-closed"); exit 22 }
+    $m = PU-Subarvore-Morta ([uint32]$ls.pid) ([long]$ls.criacao)
+    if (-not $m.Morta) { [Console]::Error.Write("R-01: execucao anterior VIVA (lease $($ls.exec_id)): $([string]::Join('; ',$m.Vivos)) - lancador NAO sobe o controlador, sem git/rollback"); exit 22 }
+    Remove-Item -LiteralPath $lf.FullName -Force -ErrorAction SilentlyContinue   # morto: limpo com seguranca
+  }
+}
+
+# So agora sobe o controlador real. A ponte e escolhida pelos parametros ClaudeCmd/TestCmd (externo; nada congelado muda).
+$psi = [System.Diagnostics.ProcessStartInfo]::new($PwshPortatil)
+foreach ($a in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$Controlador,
+    '-RepoPath',$RepoPath,'-TarefasPath',$TarefasPath,'-EstadoDir',$EstadoDir,
+    '-TestCmd',("& `"$despcmd`""),'-TestPaths',$TestPaths,'-ClaudeCmd',$pontecmd,
+    '-TimeoutSec',[string]$TimeoutControladorSeg,'-MaxTentativas',[string]$MaxTentativas,'-MaxCustoUsd','100')) { $psi.ArgumentList.Add($a) }
+$psi.UseShellExecute = $false; $psi.WorkingDirectory = $RepoPath
+$psi.Environment['B05_PWSH'] = $PwshPortatil; $psi.Environment['B05_DIR'] = $CtrlDir; $psi.Environment['B05_EXECUCAO'] = $ExecId
+$psi.Environment['PATH'] = (Split-Path $PwshPortatil) + ';' + $psi.Environment['PATH']
+$p = [System.Diagnostics.Process]::Start($psi); $p.WaitForExit()
+$cod = $p.ExitCode
+# C-02: ao fim, deixa explicita qualquer trava remanescente.
+$tv2 = PU-Trava-Ativa $trava
+if ($tv2.Ativa) { [Console]::Error.Write("lancador: TRAVA $($tv2.Tipo.ToUpper()) remanescente - $($tv2.Detalhe)") }
+exit $cod

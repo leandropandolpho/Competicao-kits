@@ -19,13 +19,19 @@ $ctrlPath = (Resolve-Path (Join-Path $raiz '..\..\..\kits\kit-A\controlador.ps1'
 . (Resolve-Path (Join-Path $raiz '..\ponte-pu.ps1')).Path   # p/ Razao-Ler/Contabilizar e PU-Lease-Gravar
 $Pw = (Get-Process -Id $PID).Path; $sha = (Get-FileHash -LiteralPath $Pw -Algorithm SHA256).Hash
 $Utf8 = [Text.UTF8Encoding]::new($false)
+# hashes_nucleo reais (R-04): os 5 scripts do nucleo que claude-ponte/despachante conferem antes do dot-source. O
+# happy-path (I-C1..I-RET) precisa trazer o mapa COMPLETO e CORRETO na config, senao bloqueia (97) de proposito.
+$nucleoMap = [ordered]@{ 'ponte-pu.ps1'=(Join-Path $raiz '..\ponte-pu.ps1'); 'acao-pe.ps1'=$acao
+  'b05job.ps1'=(Join-Path $raiz '..\..\b05job.ps1'); 'baixa-integridade.ps1'=(Join-Path $raiz '..\..\baixa-integridade.ps1')
+  'razao.ps1'=(Join-Path $raiz '..\..\razao.ps1') }
+$hashesNucleo = [ordered]@{}; foreach ($k in $nucleoMap.Keys) { $hashesNucleo[$k] = (Get-FileHash -LiteralPath $nucleoMap[$k] -Algorithm SHA256).Hash }
 $ok = 0; $tot = 0
 function Checar($n,[bool]$c,[string]$d=''){ $script:tot++; if($c){ $script:ok++; "[ok] $n" } else { "[FALHA] $n $d" } }
 if (-not $IsWindows) { "INTEGRA-CTRL: so Windows."; exit 0 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { "INTEGRA-CTRL: git ausente - pulado."; exit 0 }
 
 # Monta repo git + B05_DIR (config/razao) + ponte/evid/trava + EstadoDir + TAREFAS.json. test_cmd_real controla a fase teste.
-function Novo-Ambiente([string]$testeReal,[int]$timeoutPonte=60,[double]$orc=100) {
+function Novo-Ambiente([string]$testeReal,[int]$timeoutPonte=60,[double]$orc=100,[int]$cfgTimeoutCtrl=180) {
   $base = Join-Path $env:TEMP ('ic-' + [guid]::NewGuid().ToString('N').Substring(0,8))
   $repo = Join-Path $base 'repo'; $ctrl = Join-Path $base 'ctrl'; $ponte = Join-Path $base 'ponte'
   $evid = Join-Path $base 'evid'; $trava = Join-Path $base 'trava'; $estado = Join-Path $base 'estado'
@@ -41,7 +47,8 @@ function Novo-Ambiente([string]$testeReal,[int]$timeoutPonte=60,[double]$orc=100
   $cfg = [ordered]@{ execucao=$exec; teto_chamada_usd=0.5; folga=0.25; orcamento_usd=$orc
     executor=$Pw; executor_prefixo="-NoProfile|-File|$fake"; test_cmd_real=$testeReal
     ponte_dir=$ponte; acao_pe=$acao; pwsh_aprovado=$Pw; pwsh_sha256=$sha
-    trava_dir=$trava; evidencia_dir=$evid; timeout_ponte_seg=$timeoutPonte }
+    trava_dir=$trava; evidencia_dir=$evid; timeout_ponte_seg=$timeoutPonte
+    timeout_controlador_seg=$cfgTimeoutCtrl; hashes_nucleo=$hashesNucleo }
   [IO.File]::WriteAllText((Join-Path $ctrl "config-$exec.json"), ($cfg | ConvertTo-Json -Compress), $Utf8)
   $taref = Join-Path $ctrl 'TAREFAS.json'
   [IO.File]::WriteAllText($taref, (@{ versao='1'; tarefas=@(@{ id='T1'; titulo='Tarefa 1'; prompt='corrige'; status='pending'; tentativas=0; depends_on=@(); critica=$false }) } | ConvertTo-Json -Depth 6), $Utf8)
@@ -109,14 +116,46 @@ try { if (-not $orf.HasExited) { $orf.Kill($true) } } catch {}
 Checar 'I-RET: custo preservado na retomada (nao zerou; acumulou)' ((Custo $a1) -ge $custoAntes -and $custoAntes -gt 0) "antes=$custoAntes depois=$(Custo $a1)"
 Checar 'I-RET: pre-flight encerrou o orfao vivo antes de despachar' ($orfMorto)
 
-"== I-SHA (cópia confiável do PU, convergência Perplexity): config com hashes_nucleo divergente -> despachante 97 -> sem commit"
+# Patcher de config: aplica uma transformacao sobre o objeto da config e regrava (para os casos negativos R-04/R-05).
+function Patch-Cfg($amb, [scriptblock]$fn) {
+  $cfgPath = Join-Path $amb.Ctrl "config-$($amb.Exec).json"
+  $o = Get-Content $cfgPath -Raw | ConvertFrom-Json
+  & $fn $o
+  [IO.File]::WriteAllText($cfgPath, ($o | ConvertTo-Json -Depth 8), $Utf8)
+}
+
+"== I-SHA (R-04, convergência Perplexity/ChatGPT): config com hashes_nucleo DIVERGENTE (mapa completo, 1 hash trocado) -> 97 -> sem commit"
 $a5 = Novo-Ambiente 'exit 0'
-$cfgPath = Join-Path $a5.Ctrl "config-$($a5.Exec).json"
-$cfgObj = Get-Content $cfgPath -Raw | ConvertFrom-Json
-$cfgObj | Add-Member -NotePropertyName hashes_nucleo -NotePropertyValue ([pscustomobject]@{ 'acao-pe.ps1'='0000000000000000000000000000000000000000000000000000000000000000' }) -Force
-[IO.File]::WriteAllText($cfgPath, ($cfgObj | ConvertTo-Json -Depth 8), $Utf8)
+Patch-Cfg $a5 { param($o) $o.hashes_nucleo.'acao-pe.ps1' = '0000000000000000000000000000000000000000000000000000000000000000' }
 $r5 = Rodar-Ctrl $a5 'ok:0.20'
 Checar 'I-SHA: SHA divergente do nucleo -> teste recusado, controlador NAO comitou (HEAD=base)' ($r5.HeadAgora -eq $r5.HeadBase) "cod=$($r5.Codigo)"
+
+"== I-SHA-AUS (R-04): config SEM hashes_nucleo -> bloqueio 97 em ambos os pontos de entrada -> sem commit"
+$a5b = Novo-Ambiente 'exit 0'
+Patch-Cfg $a5b { param($o) $o.PSObject.Properties.Remove('hashes_nucleo') }
+$r5b = Rodar-Ctrl $a5b 'ok:0.20'
+Checar 'I-SHA-AUS: ausencia de hashes_nucleo -> bloqueado, HEAD=base' ($r5b.HeadAgora -eq $r5b.HeadBase) "cod=$($r5b.Codigo)"
+
+"== I-SHA-INC (R-04): config com hashes_nucleo INCOMPLETO (so 2 dos 5 scripts) -> bloqueio 97 -> sem commit"
+$a5c = Novo-Ambiente 'exit 0'
+Patch-Cfg $a5c { param($o) $o.hashes_nucleo = ([pscustomobject]@{ 'ponte-pu.ps1'=$o.hashes_nucleo.'ponte-pu.ps1'; 'acao-pe.ps1'=$o.hashes_nucleo.'acao-pe.ps1' }) }
+$r5c = Rodar-Ctrl $a5c 'ok:0.20'
+Checar 'I-SHA-INC: mapa incompleto -> bloqueado, HEAD=base' ($r5c.HeadAgora -eq $r5c.HeadBase) "cod=$($r5c.Codigo)"
+
+"== I-R05-AUS (R-05, ChatGPT): config SEM timeout_controlador_seg -> claude-ponte recusa 1 (sem disparo) -> sem commit"
+$a7 = Novo-Ambiente 'exit 0'
+Patch-Cfg $a7 { param($o) $o.PSObject.Properties.Remove('timeout_controlador_seg') }
+$r7 = Rodar-Ctrl $a7 'ok:0.20'
+Checar 'I-R05-AUS: timeout_controlador_seg obrigatorio ausente -> bloqueado, HEAD=base' ($r7.HeadAgora -eq $r7.HeadBase) "cod=$($r7.Codigo)"
+
+"== I-R05-MARGEM (R-05): timeout_controlador_seg SEM margem (timeout_ponte+35 > ctrl) -> claude-ponte recusa 1 (sem disparo) -> sem commit"
+$a8 = Novo-Ambiente 'exit 0' 60
+Patch-Cfg $a8 { param($o) $o.timeout_controlador_seg = 50 }   # 60 + 35 = 95 > 50
+$a8pp0 = (Get-ChildItem -Directory $a8.Ponte -EA SilentlyContinue | Measure-Object).Count
+$r8 = Rodar-Ctrl $a8 'ok:0.20'
+$a8pp1 = (Get-ChildItem -Directory $a8.Ponte -EA SilentlyContinue | Measure-Object).Count
+Checar 'I-R05-MARGEM: margem insuficiente -> bloqueado, HEAD=base' ($r8.HeadAgora -eq $r8.HeadBase) "cod=$($r8.Codigo)"
+Checar 'I-R05-MARGEM: nao despachou o executor (nenhuma pasta-ponte nova)' ($a8pp1 -eq $a8pp0) "pp0=$a8pp0 pp1=$a8pp1"
 
 "== I-FLAG (hardening de flags, convergência Perplexity): claude-ponte recusa flag perigosa sem disparar"
 $a6 = Novo-Ambiente 'exit 0'

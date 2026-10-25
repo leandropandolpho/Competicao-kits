@@ -17,22 +17,24 @@ if ("$($cfg.execucao)" -ne $execucao) { [Console]::Error.Write('despachante-test
 $testeReal = "$($cfg.test_cmd_real)"
 if (-not $testeReal) { [Console]::Error.Write('despachante-teste: config sem test_cmd_real'); exit 1 }
 
-# Copia confiavel do PU (convergencia com a Perplexity, Ato 148): confere o SHA-256 do NUCLEO ANTES do dot-source. Se a
-# config traz hashes_nucleo, qualquer divergencia => exit 97 (SHA divergente), sem carregar/disparar nada. O fonte no
-# GitHub nao substitui a protecao em runtime; este check garante que o PU nao carregue um nucleo adulterado.
-if ($cfg.PSObject.Properties['hashes_nucleo'] -and $cfg.hashes_nucleo) {
-  $raizPe = $PSScriptRoot
-  $mapa = @{ 'ponte-pu.ps1' = (Join-Path $raizPe 'ponte-pu.ps1'); 'acao-pe.ps1' = (Join-Path $raizPe 'acao-pe.ps1')
+# Copia confiavel do PU (R-04, convergencia Perplexity/ChatGPT Ato 147-149): confere o SHA-256 do NUCLEO ANTES do
+# dot-source. OBRIGATORIO (nao mais opcional): a config DEVE trazer hashes_nucleo com os 5 scripts; ausencia, mapa
+# INCOMPLETO ou qualquer divergencia => exit 97 (sem carregar/disparar nada). Garante que o PU nao carregue nucleo adulterado.
+function Conferir-Nucleo($cfgObj, [string]$raizPe) {
+  $mapa = [ordered]@{ 'ponte-pu.ps1' = (Join-Path $raizPe 'ponte-pu.ps1'); 'acao-pe.ps1' = (Join-Path $raizPe 'acao-pe.ps1')
     'b05job.ps1' = (Join-Path $raizPe '..\b05job.ps1'); 'baixa-integridade.ps1' = (Join-Path $raizPe '..\baixa-integridade.ps1')
     'razao.ps1' = (Join-Path $raizPe '..\razao.ps1') }
-  foreach ($k in $cfg.hashes_nucleo.PSObject.Properties.Name) {
-    $esperado = "$($cfg.hashes_nucleo.$k)".ToUpper().Replace(':', '')
+  if (-not $cfgObj.PSObject.Properties['hashes_nucleo'] -or -not $cfgObj.hashes_nucleo) { [Console]::Error.Write('R-04: config sem hashes_nucleo - bloqueado'); exit 97 }
+  foreach ($k in $mapa.Keys) {
+    if (-not $cfgObj.hashes_nucleo.PSObject.Properties[$k]) { [Console]::Error.Write("R-04: hashes_nucleo incompleto (falta $k) - bloqueado"); exit 97 }
+    $esperado = "$($cfgObj.hashes_nucleo.$k)".ToUpper().Replace(':', '')
     $p = $mapa[$k]
-    if (-not $p -or -not (Test-Path -LiteralPath $p)) { [Console]::Error.Write("despachante: arquivo do nucleo ausente: $k"); exit 97 }
+    if (-not (Test-Path -LiteralPath $p)) { [Console]::Error.Write("R-04: arquivo do nucleo ausente: $k"); exit 97 }
     $real = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToUpper()
-    if ($real -ne $esperado) { [Console]::Error.Write("despachante: SHA-256 do nucleo divergente ($k): $real != $esperado"); exit 97 }
+    if ($real -ne $esperado) { [Console]::Error.Write("R-04: SHA-256 do nucleo divergente ($k): $real != $esperado"); exit 97 }
   }
 }
+Conferir-Nucleo $cfg $PSScriptRoot
 # Nucleo do PU, de fora da arvore de trabalho (I2), protegido por ACL/IL e SHA no provisionamento.
 . (Join-Path $PSScriptRoot 'ponte-pu.ps1')
 

@@ -49,14 +49,33 @@ for ($i = 0; $i -lt $lista.Count; $i++) {
   elseif ($tok -like '-*') { Sair-Erro "flag nao permitida no modo ponte: $tok" 1 }
 }
 
-# REQ-12(1): o prazo da ponte deve caber no TimeoutSec do controlador (quando a config o informa), com margem.
+# REQ-12(1)/R-05 (ChatGPT Ato 149): timeout_controlador_seg OBRIGATORIO e com MARGEM suficiente para a espera interna da
+# ponte (TimeoutSeg+15 no WaitForExit) + encerramento + reconciliacao. Sem isso, nao dispara.
 $timeout = if ($cfg.PSObject.Properties['timeout_ponte_seg'] -and $cfg.timeout_ponte_seg) { [int]$cfg.timeout_ponte_seg } else { 120 }
-if ($cfg.PSObject.Properties['timeout_controlador_seg'] -and $cfg.timeout_controlador_seg) {
-  if ($timeout -ge [int]$cfg.timeout_controlador_seg) { Sair-Erro "REQ-12(1): prazo da ponte ($timeout) >= TimeoutSec do controlador ($($cfg.timeout_controlador_seg))" 1 }
-}
+if (-not ($cfg.PSObject.Properties['timeout_controlador_seg'] -and $cfg.timeout_controlador_seg)) { Sair-Erro 'R-05: timeout_controlador_seg obrigatorio na config - sem disparo' 1 }
+$timeoutCtrl = [int]$cfg.timeout_controlador_seg
+$margem = 15 + 20   # 15s da espera interna (WaitForExit TimeoutSeg+15) + 20s de encerramento/reconciliacao/retorno
+if (($timeout + $margem) -gt $timeoutCtrl) { Sair-Erro "R-05: prazo da ponte ($timeout) + margem ($margem) > TimeoutSec do controlador ($timeoutCtrl) - sem disparo" 1 }
 
+# R-04 (ChatGPT/Perplexity Ato 149): SHA-256 do NUCLEO conferido ANTES do dot-source, OBRIGATORIO (config deve trazer
+# hashes_nucleo com os 5 scripts; ausencia/incompleto/divergente => bloqueia sem carregar). Mesma politica do despachante.
+function Conferir-Nucleo($cfgObj, [string]$raizPe) {
+  $mapa = [ordered]@{ 'ponte-pu.ps1' = (Join-Path $raizPe 'ponte-pu.ps1'); 'acao-pe.ps1' = (Join-Path $raizPe 'acao-pe.ps1')
+    'b05job.ps1' = (Join-Path $raizPe '..\b05job.ps1'); 'baixa-integridade.ps1' = (Join-Path $raizPe '..\baixa-integridade.ps1')
+    'razao.ps1' = (Join-Path $raizPe '..\razao.ps1') }
+  if (-not $cfgObj.PSObject.Properties['hashes_nucleo'] -or -not $cfgObj.hashes_nucleo) { Sair-Erro 'R-04: config sem hashes_nucleo - bloqueado' 97 }
+  foreach ($k in $mapa.Keys) {
+    if (-not $cfgObj.hashes_nucleo.PSObject.Properties[$k]) { Sair-Erro "R-04: hashes_nucleo incompleto (falta $k) - bloqueado" 97 }
+    $esperado = "$($cfgObj.hashes_nucleo.$k)".ToUpper().Replace(':', '')
+    $p = $mapa[$k]
+    if (-not (Test-Path -LiteralPath $p)) { Sair-Erro "R-04: arquivo do nucleo ausente: $k" 97 }
+    $real = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToUpper()
+    if ($real -ne $esperado) { Sair-Erro "R-04: SHA-256 do nucleo divergente ($k)" 97 }
+  }
+}
+Conferir-Nucleo $cfg $PSScriptRoot
 # Nucleo do PU, carregado de FORA da arvore de trabalho (I2): mesma pasta deste wrapper (b05/pe), protegida por ACL/IL
-# e com SHA-256 conferido pelo provisionamento (copia confiavel do PU). O fonte no GitHub nao substitui a protecao runtime.
+# e com SHA-256 conferido (copia confiavel do PU). O fonte no GitHub nao substitui a protecao runtime.
 . (Join-Path $PSScriptRoot 'ponte-pu.ps1')
 
 $teto = [double]$cfg.teto_chamada_usd; $folga = [double]$cfg.folga; $orc = [double]$cfg.orcamento_usd
