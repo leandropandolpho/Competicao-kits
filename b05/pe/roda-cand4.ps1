@@ -30,7 +30,36 @@ $esperado = [ordered]@{
   "$nuc\razao.ps1"               = '9F302EF681A03A045315925120BD1A216EB3434F900DE5772F15CA5E0FB5DF56'
 }
 Linha "=== CANDIDATA 4 - gate-pe - $stamp UTC ==="
+# Binario aprovado (Ato 151, Perplexity): o runner e cada bateria DEVEM rodar sob o pwsh PORTATIL aprovado, NAO o MSIX
+# da Store (que roda em Job de app-container e quebra o reaping de neto do Job). FATAL antes de qualquer bateria se divergir.
+$portatil = Join-Path (Split-Path -Parent $base) 'ferramentas\pwsh-7.6.7\pwsh.exe'
+$shaPwshOk = 'FA2C8BB1E35CDD62AD15CD06A1D8F2C5961E9725A9BFA1E7CFD2C322F49E9619'
+$pwshSha = try { (Get-FileHash -LiteralPath $pwsh -Algorithm SHA256).Hash.ToUpper() } catch { 'ERRO' }
+$emMsix = ($pwsh -like '*\WindowsApps\*')
 Linha "pwsh: $pwsh ($($PSVersionTable.PSVersion))"
+Linha "pwsh_sha256: $pwshSha"
+Linha "pwsh_msix: $emMsix   portatil_esperado: $portatil"
+try {
+  Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class DiagJ {
+  [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+  [DllImport("kernel32.dll")] public static extern bool IsProcessInJob(IntPtr p, IntPtr j, out bool r);
+  [StructLayout(LayoutKind.Sequential)] public struct B { public long a; public long b; public uint LimitFlags; public UIntPtr c; public UIntPtr d; public uint e; public UIntPtr f; public uint g; public uint h; }
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool QueryInformationJobObject(IntPtr j, int c, ref B i, uint l, IntPtr r);
+}
+"@ -ErrorAction Stop
+  $emJob = $false; [void][DiagJ]::IsProcessInJob([DiagJ]::GetCurrentProcess(), [IntPtr]::Zero, [ref]$emJob)
+  $bj = New-Object DiagJ+B
+  $okj = [DiagJ]::QueryInformationJobObject([IntPtr]::Zero, 2, [ref]$bj, [uint32][Runtime.InteropServices.Marshal]::SizeOf($bj), [IntPtr]::Zero)
+  Linha ("job: em_job={0} flags=0x{1:X} ok={2} (0x800 BREAKAWAY 0x1000 SILENT_BREAKAWAY 0x2000 KILL_ON_CLOSE)" -f $emJob, $bj.LimitFlags, $okj)
+} catch { Linha "job: diagnostico indisponivel ($($_.Exception.Message))" }
+if ($pwsh -ne $portatil -or $pwshSha -ne $shaPwshOk) {
+  Linha "FATAL: pwsh nao e o PORTATIL aprovado (ou SHA diverge) - baterias NAO executadas."
+  [IO.File]::WriteAllText($out, ($L -join "`r`n"), [Text.UTF8Encoding]::new($false))
+  Write-Host "RESULTADO: $out"; exit 3
+}
+Linha "--- pwsh aprovado OK (portatil, SHA confere) ---"
 Linha "--- MANIFESTO SHA-256 (entrega) ---"
 $integro = $true
 foreach ($p in $esperado.Keys) {
