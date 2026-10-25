@@ -157,3 +157,35 @@ bateria verde: exige reconciliacao de evidencias e objecoes materiais (decisao t
   gatilho R1 concomitante, em vez de failed — respeitar a precedencia do controlador congelado.
 - Copia confiavel do PU: a copia da ponte e do despachante executada pelo PU fica fora da arvore editavel pelo PE
   (ACL/IL efetivas) com SHA-256 conferido; o fonte no GitHub nao substitui a protecao em runtime.
+
+## 11. Emendas do Ato 150 (ajustes convergidos do Ato 149; candidata 4, c980c2f preservado)
+Convergência do Ato 149: ChatGPT e Perplexity exigem R-04/R-05 obrigatórios já (ChatGPT: candidata 3 "NÃO totalmente
+fechada" sem eles); Gemini aprova c980c2f e não se opõe à inclusão do lançador como script complementar EXTERNO, desde
+que c980c2f seja preservado imutável. Candidata 4 = NOVO commit sobre c980c2f (preservado como ancestral), incorporando:
+
+- R-04 (SHA do núcleo OBRIGATÓRIO, nos DOIS pontos de entrada): claude-ponte.ps1 e despachante-teste.ps1 conferem o
+  SHA-256 dos 5 scripts do núcleo (ponte-pu, acao-pe, b05job, baixa-integridade, razao) ANTES do dot-source. A config
+  DEVE trazer hashes_nucleo completo; ausência, mapa incompleto ou qualquer divergência => BLOQUEIO (exit 97), sem
+  carregar nem despachar. Deixou de ser opcional (era "se houver hashes_nucleo"). Provas: I-SHA (divergente), I-SHA-AUS
+  (ausente), I-SHA-INC (incompleto) no controlador real.
+- R-05 (timeout OBRIGATÓRIO + margem): claude-ponte.ps1 exige timeout_controlador_seg na config e valida
+  timeout_ponte + margem (35s: 15s de espera interna + 20s de encerramento/reconciliação) <= timeout_controlador_seg;
+  caso contrário recusa (exit 1) SEM disparar. Provas: I-R05-AUS (ausente), I-R05-MARGEM (margem insuficiente -> sem
+  despacho).
+- R-01/D-1 (lançador-ponte EXTERNO e ADITIVO): novo lancador-ponte.ps1/.cmd. NÃO altera uma linha de controlador
+  (7cd7864), claude-com-teto (9e6991c), supervisora (6b45dea), lancador.ps1 nem do núcleo B-05 (todos diff=VAZIO). Antes
+  de subir/retomar o controlador: (a) grava a config IMUTÁVEL da execução (FileMode CreateNew + somente-leitura) com
+  hashes_nucleo obrigatório (R-04) e o executor PARAMETRIZADO (não embute o fake como operacional); (b) PRÉ-FLIGHT
+  ANTI-ÓRFÃO (R-01): se existir lease de execução anterior com subárvore VIVA, NÃO sobe o controlador e sai 22 — impede
+  qualquer git/rollback enquanto um PE anterior puder escrever (fail-closed); lease de subárvore morta é conferido e
+  limpo; (c) trava persistente preserva D-06 (financeira=>28, seguranca=>70, senão 26). Só então sobe o controlador real
+  via -ClaudeCmd=claude-ponte.cmd e -TestCmd=despachante-teste.cmd (seleção 100% externa). Provas: PU-11b (lease vivo =>
+  22, controlador não sobe, arquivo não-rastreado preservado, EstadoDir vazio), C6-real (morte abrupta em in_progress =>
+  nenhum commit; 2º lançador retoma após liberação segura => commit, custo preservado), L-OK (config imutável +
+  hashes_nucleo + commit), L-TRV (trava financeira => 28, controlador não sobe).
+- Códigos de saída do lançador: 0 (controlador done); 22 (R-01: órfão vivo, não sobe); 26 (trava persistente
+  genérica); 28 (trava financeira); 29 (R-05: margem de prazo insuficiente na validação prévia); 70 (trava segurança);
+  97 não se aplica ao lançador (ele ESTABELECE os hashes; R-04 bloqueia nos pontos de entrada).
+- CORREÇÃO DE REGISTRO (honestidade documental): no Ato 148 constou que a Perplexity "prova RC-6b". A Perplexity
+  esclareceu (Ato 149) que ESCREVEU, mas NÃO executou o RC-6b. A prova de execução de RC-6b/PU-11b/C6-real passa a ser a
+  deste pacote (candidata 4, bateria real no Windows), não a da Perplexity.
