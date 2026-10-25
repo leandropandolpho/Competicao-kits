@@ -1,0 +1,32 @@
+=== GATE JOB-TOPO (C4-F01) — 20261025-181333 UTC ===
+pwsh: C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe (7.6.7)  msix=False  sha_ok=True
+
+===== L-JOB-TOPO =====
+[OK]   TOPO-sup-criado — JobLancadorPonte handle=2196
+[OK]   TOPO-sup-config — Configurar(KILL_ON_JOB_CLOSE)
+[OK]   TOPO-sup-flags — flags supervisor=0x2000
+[OK]   TOPO-controlador-no-supervisor — assign=True em_job=True (controlador associado antes de executar)
+[OK]   TOPO-jpe-criado — JobPE handle=2104
+[OK]   TOPO-jpe-config — Configurar(KILL_ON_JOB_CLOSE)
+[OK]   TOPO-jpe-restringir-ui — RestringirUI(JobPE) (0x1|0x2|0x4|0x20) — ponto crítico do C4-F01/Q3
+[OK]   TOPO-jpe-flags — flags JobPE=0x2000
+[OK]   TOPO-filho-suspenso — CreateProcess CREATE_SUSPENDED pid=17024 err=0
+[OK]   TOPO-assoc-aninhada — AssignProcessToJobObject(JobPE, filho) assoc=True err=0 (Q3: UI aninhada não barra a associação)
+[OK]   TOPO-filho-no-jpe — IsProcessInJob(filho, JobPE)=True
+[OK]   TOPO-filho-no-supervisor — IsProcessInJob(filho, supervisor)=True (herança do supervisor preservada)
+
+===== L-JOB-ASSOC =====
+[OK]   ASSOC-filho-suspenso — CreateProcess CREATE_SUSPENDED pid=19984 err=0
+[OK]   ASSOC-suspenso-orfao-limpo — encerrar='encerrado'; filho vivo após encerrar=False (nenhum código executou)
+
+===== L-JOB-KILL =====
+KILL-arvore: lancador=3864 filho=40996 neto=39072
+[OK]   KILL-supervisor-morto — lancador encerrado ('encerrado')
+[OK]   KILL-controlador-morto — filho (controlador) encerrado pela queda do Job
+[OK]   KILL-neto-morto — neto (executor) encerrado pela queda do Job
+
+TOTAL GATE JOB-TOPO: TODAS VERDES — 20261025-181333
+
+VEREDITO:
+  PASSA  -> C4-F01/Q3 empiricamente respondido: implementar G1–G9 + bateria (candidata 4.2 controlada).
+  FALHA  -> NÃO relaxar RestringirUI nem habilitar breakaway; voltar à mesa com estas evidências.
