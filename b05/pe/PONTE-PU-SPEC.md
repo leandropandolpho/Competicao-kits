@@ -209,3 +209,23 @@ contêiner de execução.
   c980c2f (candidata 3) preservado como ancestral imutável. Congelados intactos (diff VAZIO): controlador 7cd7864,
   claude-com-teto 9e6991c, supervisora 6b45dea, lancador.ps1 e núcleo B-05. Bloqueios mantidos: deploy, V2,
   provisionamento, cobrança, execução desassistida; R1/B-07/aprovação humana.
+
+## 13. Ato 153 — ajustes convergidos (C4-F02, C4-F03, C6-complemento) — CANDIDATA 4.1 (137/137)
+Da reverificação da mesa (Ato 153): Gemini 4/4; Perplexity aprova com C4-01; ChatGPT acata 129/129 mas objeta o
+fechamento integral (C4-F01/F02/F03). Acatados e incorporados os itens CONVERGENTES e não-congelados:
+- **C4-F02 — gate do pwsh no LANÇADOR** (não só no runner): `lancador-ponte.ps1` exige caminho canônico + SHA-256
+  aprovado (FA2C8BB1…E9E9619) do pwsh e RECUSA MSIX (`\WindowsApps\`) antes de qualquer despacho (exit 31);
+  `lancador-ponte.cmd` recusa `B05_PWSH` do WindowsApps. **Prova:** L-PWSH (pwsh não aprovado ⇒ 31, controlador não sobe).
+- **C4-F03 — âncora de confiança**: o lançador compara os hashes do núcleo contra um MANIFESTO APROVADO e protegido
+  (`hashes-nucleo-aprovado.json`), não apenas os arquivos do runtime; ausência/não-cobertura/divergência ⇒ FATAL (97);
+  a config carrega os valores APROVADOS. **Prova:** L-MANIF (núcleo diverge do manifesto ⇒ 97).
+- **C6-complemento**: o C6-real passou a comprovar também: T1 estava in_progress na morte (tentativas≥1); árvore de
+  trabalho LIMPA após a retomada; integridade do commit (notas.txt no HEAD) no caso limpo OU HEAD=base + reserva mantida
+  no fail-close.
+- Matriz real sob o binário aprovado: **PE 40/40 · PU 39/39 · INTEGRA 13/13 · CONTROLADOR-REAL 18/18 · LANCADOR 27/27 =
+  137/137, EXITCODE 0** (resultado 20261025-131950). Integridade de entrega 15/15. b6d8d44 preservado como ancestral.
+- **ABERTO → MESA (C4-F01, ChatGPT):** equivalência do lançador externo às garantias do `lancador.ps1` B-05 (Job de
+  supervisão do controlador, mutex EstadoDir/RazaoDir, reconciliação/anti-concorrência). Por ser ARQUITETURAL, não é
+  decidido nem implementado unilateralmente: submetido à mesa (parecer focal de Gemini/Perplexity). Posição do Auditor
+  Principal: proposta ADITIVA (mutex por EstadoDir/RazaoDir + Job de supervisão com KILL_ON_JOB_CLOSE envolvendo o
+  controlador), sem tocar componentes congelados, a ratificar pela mesa antes de implementar.

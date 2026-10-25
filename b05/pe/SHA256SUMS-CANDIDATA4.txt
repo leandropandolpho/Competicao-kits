@@ -1,8 +1,9 @@
-# SHA256SUMS - CANDIDATA 4 (gate-pe) - matriz 129/129 sob pwsh aprovado FA2C8BB1...E9E9619
-# 2026-10-25T12:38:52Z - c980c2f (candidata 3) preservado como ancestral imutavel
+# SHA256SUMS - CANDIDATA 4.1 (gate-pe) - matriz 137/137 sob pwsh aprovado FA2C8BB1...E9E9619 (ajustes Ato 153)
+# 2026-10-25T13:36:33Z - b6d8d44 (candidata 4) preservado como ancestral
 # NUCLEO B-05 (diff VAZIO): ponte-pu acao-pe b05job baixa-integridade razao
-bdd708bbd79488d086d05ae2d19032f75580d8456dcf4b5185db1dbcf2ee6455  lancador-ponte.ps1
-d4817dfd5397e4bbe36e06f2a6c1af52bdd61bb44a74d895b3ad6ece40831d7a  lancador-ponte.cmd
+a0ef111617274cc9e581f3b4a58c1d6948a606b43d7330cad7e208f1d8a466b8  lancador-ponte.ps1
+97f2f92b49c9ccfbe734ef287fa57892491c69a578d95b60ce4f48e9fae6e41e  lancador-ponte.cmd
+979699aa1ce6f0744a2820b9df86cfafdaf593c87f02c835b5ea381bb4247a10  hashes-nucleo-aprovado.json
 7ae5a32061e6a0d871298186dbc1df3b3135df6432e5e696bf69c8117157c170  claude-ponte.ps1
 b7b2e7f445c7ad02cecb02553d13722c19a8db248708f34afc58eb8d1d6e33b8  claude-ponte.cmd
 48a1263145f7be3f2dfe24090b1452a4707133a33d33ef4adf8980e996fd24c5  despachante-teste.ps1
@@ -16,4 +17,4 @@ c84d41969de097f9ea04d9c11c6e126651e22c89cfd2a735439eb6cca525d0fa  b05job.ps1
 07ccb11fcef9a19e03defb15a4b16c1f64aec9b3139b7bd75459094e7d8d6eba  testar-ponte-pu.ps1
 480ed33377171a40b7d9d587c63982b1006c5b524e383f7ce5ffdde6f7e814e7  testar-integra-ponte.ps1
 6692de8b7ddf699e123a73d053d46fb320ec9198d87fc863344f4bacacd3ece8  testar-controlador-real-ponte.ps1
-b2b3c59e3c7b5d54b5add63a0be2fc08fc05ae588b28add5fce02464d332d563  testar-lancador-ponte.ps1
+6cf4b84197365e49358742076928f654bdeaa450392f290a96ef2fdf80f15042  testar-lancador-ponte.ps1
