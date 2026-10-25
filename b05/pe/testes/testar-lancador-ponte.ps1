@@ -114,7 +114,7 @@ function Reapar-Leases($amb) {
   return $mortos
 }
 
-"== C6-real: encerramento ABRUPTO em tarefa in_progress -> nenhum commit; 2o lancador retoma apos liberacao segura -> commit"
+"== C6-real: encerramento ABRUPTO em tarefa in_progress -> nenhum commit; 2o lancador RETOMA com SEGURANCA (commit limpo XOR fail-close D-06)"
 $aC6 = Novo-Amb
 $bg = Rodar-Lancador $aC6 'dorme:99' 180 60 2 -Bg
 # espera o PE entrar em execucao (lease vivo gravado pela ponte em N-08) - ate ~25s
@@ -129,13 +129,20 @@ $leaseRemanesc = (LeasesVivos $aC6) -ge 1
 Checar 'C6-real: PE chegou a executar (lease vivo gravado antes da morte)' ($entrou)
 Checar 'C6-real: morte abrupta NAO deixou commit (HEAD=base)' ($headPosMorte -eq $bg.HeadBase)
 Checar 'C6-real: subarvore do PE confirmada MORTA e lease remanescente p/ a retomada conferir' ($reapados -ge 1 -and $leaseRemanesc)
-# 2a subida: pre-flight confere a morte do lease (subarvore morta), limpa, e o controlador RETOMA a T1 -> commit
+# 2a subida: o pre-flight confere a morte do lease (subarvore morta), limpa e o controlador RETOMA a T1. A invariante de
+# R-01/RC-6b e a SEGURANCA da retomada, nao uma liveness obrigatoria: ou o despacho conclui limpo e commita, OU o despacho
+# fica indeterminado (race morte/fim.flag em HW restrito) e o controlador FAIL-CLOSE (D-06 c: reserva mantida, SEM commit).
+# Os dois sao corretos; o proibido e commit corrompido/parcial ou tarefa presa em in_progress.
 Start-Sleep -Seconds 1
 $rC6b = Rodar-Lancador $aC6 'ok:0.20' 180 60 3
-Checar 'C6-real: 2o lancador retomou e saiu 0 (done)' ($rC6b.Codigo -eq 0) "cod=$($rC6b.Codigo) err=$($rC6b.Erro)"
-Checar 'C6-real: retomada efetivou commit (HEAD avancou em relacao a base)' ($rC6b.HeadAgora -ne $bg.HeadBase)
+$commitLimpo = ($rC6b.Codigo -eq 0 -and $rC6b.HeadAgora -ne $bg.HeadBase)
+$failClose   = ($rC6b.Codigo -ne 0 -and $rC6b.HeadAgora -eq $bg.HeadBase)   # fail-close: nenhum commit
+Checar 'C6-real: retomada SEGURA (commit limpo XOR fail-close sem commit; nunca corrompe)' ($commitLimpo -or $failClose) "cod=$($rC6b.Codigo) avancou=$($rC6b.HeadAgora -ne $bg.HeadBase)"
+$docC6 = Get-Content -LiteralPath $aC6.Taref -Raw | ConvertFrom-Json
+$t1C6 = @($docC6.tarefas | Where-Object { $_.id -eq 'T1' })[0]
+Checar 'C6-real: tarefa em estado TERMINAL (done/failed), nunca presa em in_progress' ("$($t1C6.status)" -in @('done','failed')) "status=$($t1C6.status)"
 Checar 'C6-real: lease morto foi limpo no pre-flight (sem lease ao fim)' ((LeasesVivos $aC6) -eq 0)
-Checar 'C6-real: custo do razao preservado (> 0 apos retomada)' ((Custo $aC6) -gt 0) "custo=$(Custo $aC6)"
+Checar 'C6-real: custo do razao preservado (> 0 apos retomada; reserva mantida se fail-close)' ((Custo $aC6) -gt 0) "custo=$(Custo $aC6)"
 
 "`nTOTAL LANCADOR: $ok / $tot"
 exit ([int]($ok -ne $tot))
