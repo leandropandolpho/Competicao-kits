@@ -126,10 +126,12 @@ try {
     # cenário negativo: associação 'falha' (simulada) => encerrar o suspenso ANTES de qualquer ResumeThread
     $snapA = [B05Job]::Snapshot(); $criA = $snapA[[uint32]$pi2.pid].Criacao
     $r = [B05Job]::Encerrar([uint32]$pi2.pid, $criA)
-    Start-Sleep -Milliseconds 300
-    $h = [B05Job]::OpenProcess(0x1000, $false, [uint32]$pi2.pid)
-    $vivo = ($h -ne [IntPtr]::Zero); if ($vivo) { [void][B05Job]::CloseHandle($h) }
-    Checar 'ASSOC-suspenso-orfao-limpo' (-not $vivo) "encerrar='$r'; filho vivo após falha=$vivo (nenhum código executou)"
+    Start-Sleep -Milliseconds 800
+    # liveness correto (igual ao L-JOB-KILL): presença no snapshot com a MESMA criação. OpenProcess ainda abre um
+    # processo recém-encerrado (zumbi) enquanto houver handle — por isso não serve como prova de vida.
+    $sA = [B05Job]::Snapshot()
+    $vivo = ($sA.ContainsKey([uint32]$pi2.pid)) -and ($sA[[uint32]$pi2.pid].Criacao -eq $criA)
+    Checar 'ASSOC-suspenso-orfao-limpo' (-not $vivo) "encerrar='$r'; filho vivo após encerrar=$vivo (nenhum código executou)"
   }
 } catch { Linha "[FALHA] L-JOB-ASSOC exceção: $($_.Exception.Message)"; $falhas++ }
 finally { if ($pi2.hProcess -ne [IntPtr]::Zero) { [void][SpikeProc]::CloseHandle($pi2.hProcess); [void][SpikeProc]::CloseHandle($pi2.hThread) } }
