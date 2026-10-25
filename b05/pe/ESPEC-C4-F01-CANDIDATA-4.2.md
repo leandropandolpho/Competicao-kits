@@ -1,177 +1,186 @@
-# Ato - Autonomous multi-LLM orchestration flow - 158
+# Ato - Autonomous multi-LLM orchestration flow - 164
 
-## ESPECIFICAÇÃO ADITIVA C4-F01 — equivalência do lançador externo às garantias do B-05 (rumo à candidata 4.2)
+## ESPECIFICAÇÃO ADITIVA C4-F01 — v2 (correções contratuais do Ato 163, verificadas no B-05 congelado)
 
 **ORIGEM:** Claude (Opus 4.8) — Auditor Principal
 **BASE:** candidata 4.1 `gate-pe @ 0c1f2fe` (137/137), ancestral `b6d8d44` preservado
-**INSUMOS:** pareceres focais Ato 155 — Gemini 3.1 Pro (APROVA aditiva + 6 testes) e ChatGPT GPT-6 (ACATO
-PARCIAL/CONDICIONAL + 9 propriedades + gate de topologia de Jobs)
-**NATUREZA:** DOCUMENTO DE PROJETO. Nenhum código implementado aqui; nenhum componente congelado tocado.
-Implementação só após o gate empírico de topologia (§4) e a convergência focal da mesa (Perplexity pendente).
+**RATIFICAÇÕES Ato 163:** Gemini 3.1 Pro (ratificação INTEGRAL) + ChatGPT GPT-6 (ratificação CONDICIONAL com
+correções contratuais). Perplexity fora desta rodada por decisão do responsável (sem crédito) — reservada para
+reauditar a 4.2 pronta.
+**NATUREZA:** DOCUMENTO DE PROJETO. Nenhum código implementado; congelados com diff VAZIO. Implementação só
+após o gate empírico (§4) passar no Windows real.
 
 ---
 
-## 1. Ratificação dos convergentes (FECHADOS — não voltam à mesa)
+## 0. Correções da v2 (o que mudou desde o Ato 158) — por verificação no `lancador.ps1` B-05
 
-Gemini ratificou e ChatGPT/Perplexity já haviam acatado. **FINAL** na candidata 4.1:
+Conferi o contrato do `b05/lancador.ps1` CONGELADO (v3.1, Atos 075–077). As correções do ChatGPT (A1/A2 + G6)
+são o **contrato real do B-05** — acato por FATO, não por voto; a ratificação integral do Gemini não prevalece
+sobre o contrato congelado, e as correções só AUMENTAM a equivalência (que é o objetivo do C4-F01):
 
-- **C4-F02** (gate do pwsh em toda entrada da ponte; recusa MSIX/SHA → exit 31; teste L-PWSH).
-- **C4-F03** (âncora de manifesto imutável `hashes-nucleo-aprovado.json`; divergência → exit 97; teste L-MANIF).
+- **Códigos de saída (A1) — tabela normativa do B-05, a espelhar na ponte:**
+  `20` trava ocupada (EstadoDir/RazaoDir = concorrência) · `21` razão ilegível · `22` processo antigo vivo ·
+  `23` saldo insuficiente (admissão) · `24` falha no Job Object · `25` versão do Claude · `26` pastas inválidas ·
+  `27` pwsh empacotado/hash · `28` reconciliação financeira divergente · `29` contenção violada (ou violação
+  anterior sem LIBERACAO_HUMANA) · `30` vínculo divergente · `31` rótulo indeterminado/reprovado.
+  → **Meu `exit 23` para concorrência (v1) estava ERRADO** (23 = saldo insuficiente). Concorrência = **20**.
+  → **Vínculo** = **30** (não 28). **Admissão/orçamento** = **23**. **Reconciliação financeira** = **28**.
+- **Reserva pendente (A2):** `inicio` sem `fim` conhecido **NÃO** exige `LIBERACAO_HUMANA.txt`. O B-05 contabiliza
+  como **reserva pendente = `teto×(1+folga)`** (lancador.ps1 L141; ponte-pu D-06(c)). `LIBERACAO_HUMANA.txt`
+  pertence à liberação de **violação de contenção anterior** (código 29), não à conversão de custo desconhecido.
+  → Corrigido o G4 (eu havia misturado as duas coisas).
+- **G6 rótulos (ChatGPT):** Médio é **`>=8192`** (verificável), não apenas "≠4096" (lancador.ps1 L229). Repositório
+  recém-criado NÃO começa Low: aplicar rótulos de confiança e **reler** antes de autorizar executor Low.
+- **Achado relevante:** o `lancador.ps1` B-05 **já é a implementação de referência** de G1–G9 com essa tabela —
+  inclusive `RestringirUI` (B05-F11 sem bypass, L152), handle não-herdável (L156), dispensa de processo
+  pré-existente (L176), e os testes N10 `-TesteFalharAssociacao`/`-TesteHandleHerdavel`. A ponte deve
+  **espelhar** esse contrato de forma ADITIVA, sem chamá-lo (motivo de interface, §2.2).
+
+---
+
+## 1. Convergentes FECHADOS (não reabrir) — ratificados pelo Gemini (Ato 155/163)
+
+- **C4-F02** (gate pwsh em toda entrada; recusa MSIX/SHA → exit 31 no gate de pwsh; cf. B-05 código 27 p/ pwsh).
+- **C4-F03** (âncora de manifesto `hashes-nucleo-aprovado.json`; divergência → exit 97).
 - **C6-complemento** (T1 `in_progress` na morte; árvore LIMPA; invariante commit íntegro XOR fail-close).
 
 ---
 
-## 2. Leitura de convergência do Ato 155 sobre C4-F01
+## 2. Convergência do C4-F01 (Atos 155 + 163)
 
 | Ponto | Gemini 3.1 Pro | ChatGPT GPT-6 | Claude (Principal) | Situação |
 | --- | --- | --- | --- | --- |
-| Reprodução ADITIVA no `lancador-ponte.ps1` (sem chamar `lancador.ps1`) | APROVA | PREFERE | ADOTO | **CONVERGE** |
-| Preservar congelados (diff VAZIO) | sim | sim | sim | **CONVERGE** |
-| Garantias faltantes (Q2) ampliadas | +B05-F09, B05-F10, reconc. financeira, vínculo bidirecional, sem sobreviventes | +H7, E76-03, E76-04/H8/H9, E76-01, P4, integridade fail-close | unifico as duas listas (§3) | **CONVERGE/COMPLEMENTA** |
-| Mutex ativo **durante toda** a execução (não só pre-flight) | mutex antes do despacho | exige durante a execução inteira | ADOTO o escopo maior (ChatGPT) | **CONVERGE no maior** |
-| Controlador sob supervisão **antes** de executar instrução | implícito | EXPLÍCITO (sem janela criação↔associação) | ADOTO: CREATE_SUSPENDED → assign → resume | **CONVERGE no maior** |
-| **Topologia de Jobs aninhados + RestringirUI do `acao-pe`** (Q3) | "NÃO reintroduz; eis as provas" | "risco técnico REAL; provar antes de implementar" | ver §2.1 | **DIVERGÊNCIA DE GRAU → gate empírico** |
-| Chamar `lancador.ps1` é vedado (Q4) | sim (recria MSIX + diff) | OBJEÇÃO ao motivo "MSIX"; vedado por incompatibilidade de interface (fixa `claude-com-teto.cmd`; ponte precisa de 2 despachantes) | concordo com a CONCLUSÃO; motivo correto = interface/contrato (§2.2) | **CONVERGE na conclusão** |
-| Bateria negativa mínima (Q5) | 6 testes | 9 propriedades (agrupáveis) | união consolidada (§5) | **CONVERGE por união** |
+| Arquitetura aditiva G1–G9 | ratifica integral | ratifica condicional | adoto | **CONVERGE** |
+| Chamar `lancador.ps1` vedado | sim | sim (motivo: interface) | sim (§2.2) | **CONVERGE** |
+| Gate empírico antes do código | sim, suficiente | sim, com complementos (§4) | adoto o maior | **CONVERGE no maior** |
+| Bateria 12 propriedades | aceita | aceita c/ códigos corrigidos | adoto | **CONVERGE** |
+| **Códigos de saída** | OK ao `exit 23` (mutex) | OBJEÇÃO: 20=mutex, 23=saldo, 30=vínculo | **verifiquei no B-05 → ChatGPT certo** | **resolvido por FATO** |
+| Reserva pendente / LIBERACAO_HUMANA | — | separar (A2) | **verifiquei no B-05 → ChatGPT certo** | **resolvido por FATO** |
 
-### 2.1. Análise da divergência de Q3 (posição do Auditor Principal)
-
-A divergência é de GRAU, não de método. Gemini afirma que o aninhamento é seguro desde o Windows 8
-(Jobs aninhados nativos; o defeito do Ato 151 foi a flag `SILENT_BREAKAWAY_OK` imposta pelo MSIX, não o
-aninhamento) e oferece duas provas objetivas. ChatGPT levanta risco REAL: o `acao-pe.ps1` aplica
-`RestringirUI` ao seu Job antes de associar o executor, e a associação de um processo já pertencente a um
-Job a outro Job aninhado está sujeita a restrições de UI documentadas pela Microsoft — logo
-`AssignProcessToJobObject` pode falhar mesmo com o pwsh portátil.
-
-**Os dois exigem a MESMA prova** (topologia real dos Jobs + sucesso da associação + `RestringirUI`
-preservado + encerramento em cascata). Gemini prevê que passa; ChatGPT condiciona a implementação a essa
-prova. **Minha posição:** não autorizo implementação da solução completa antes do gate empírico. Reduzo a
-controvérsia a um **spike de topologia** curto e isolado (§4) que decide a questão com fato, antes de
-qualquer código da 4.2. Se passar, a objeção do ChatGPT está empiricamente respondida; se falhar, a
-premissa da arquitetura muda e volta à mesa (alternativa que preserve a contenção sem relaxar a UI do PE).
-
-### 2.2. Q4 — por que não chamar o `lancador.ps1` congelado
-
-Acato a CONCLUSÃO (vedado) pelo motivo correto apontado pelo ChatGPT: o `lancador.ps1` (9e6991c) fixa
-`claude-com-teto.cmd`, enquanto a ponte precisa selecionar `claude-ponte.cmd` e `despachante-teste.cmd`
-separadamente — incompatibilidade de interface/contrato. Alterá-lo violaria o diff VAZIO (I1). Portanto a
-reprodução aditiva é o único caminho arquiteturalmente limpo, independentemente do argumento MSIX.
+### 2.2. Por que não chamar o `lancador.ps1` congelado
+Conclusão convergente. Motivo correto (ChatGPT, confirmado no código): o `lancador.ps1` fixa `claude-com-teto.cmd`
+(L36: `$Embrulho = ...claude-com-teto.cmd`), enquanto a ponte precisa selecionar `claude-ponte.cmd` e
+`despachante-teste.cmd` separadamente — incompatibilidade de interface/contrato. Alterá-lo violaria o diff VAZIO (I1).
 
 ---
 
-## 3. Garantias a reproduzir no `lancador-ponte.ps1` (união Gemini + ChatGPT)
+## 3. Garantias a reproduzir no `lancador-ponte.ps1` (G1–G9, v2 com códigos do B-05)
 
-Todas ADITIVAS, reutilizando as primitivas congeladas e ancoradas por SHA (`b05job.ps1`,
-`baixa-integridade.ps1`, `razao.ps1` — já cobertas por C4-F03), sem tocar
-`controlador.ps1`/`claude-com-teto.ps1`/`supervisora.ps1`/`lancador.ps1`/núcleo B-05.
+Todas ADITIVAS; espelham o `lancador.ps1` B-05; reutilizam primitivas congeladas ancoradas por SHA (C4-F03);
+sem tocar `controlador.ps1`/`claude-com-teto.ps1`/`supervisora.ps1`/`lancador.ps1`/núcleo B-05.
 
-- **G1 — Job de supervisão do controlador.** Criar `JobLancadorPonte` com `KILL_ON_JOB_CLOSE` (0x2000) e
-  SEM `SILENT_BREAKAWAY_OK`. O controlador sobe `CREATE_SUSPENDED`, é associado ao Job e só então
-  `ResumeThread` — sem janela entre criação e associação. Coexiste em hierarquia pai→filho com o `JobPE`
-  do `acao-pe` (PE-F07).
-- **G2 — Exclusão mútua (H7).** Mutexes nomeados derivados de `EstadoDir` e `RazaoDir`, adquiridos antes do
-  despacho e MANTIDOS durante toda a vida do controlador. Partida concorrente → recusa dedicada.
-- **G3 — Vínculo persistente bidirecional (E76-03).** Gravar/conferir o identificador de vínculo
-  `EstadoDir ↔ RazaoDir` antes de subir; recusar vínculo ausente/incompleto/divergente (não parear estado
-  novo/resetado com razão histórico, nem vice-versa).
-- **G4 — Reconciliação financeira pré e pós (E76-04/H8/H9).** Antes e depois do controlador, conferir
-  `estado.json` (`custo_acumulado_usd`) == B + K (base + custos conhecidos no `razao.jsonl` após a última
-  liberação humana); recusar reserva órfã sem `LIBERACAO_HUMANA.txt` válida; admissão considerando reservas
-  pendentes. Divergência → exit 28 + trava persistente.
-- **G5 — Contenção contínua e processos anteriores (E76-01/P4).** Verificação contínua de descendentes por
-  (PID + CreateTime) via `NtQuerySystemInformation`; detecção de processo anterior; violação registrada de
-  forma durável; exigir liberação humana quando aplicável.
-- **G6 — Rótulos de integridade (B05-F09).** Aplicar e RELER via `GetNamedSecurityInfo` os rótulos efetivos:
-  RepoPath = Low IL (4096); `.git`, `.git/config`, `.git/hooks` = Medium (≠4096); `RazaoDir` e chave da
-  supervisora = Medium com `NO_READ_UP`. Divergência impede a subida → exit 31.
-- **G7 — Reparse points (B05-F10).** `B05LowIL-ReparsePoints` pré e pós-controlador (fail-closed se
-  `Ok=false` ou `Pontos.Count>0`).
-- **G8 — Encerramento verificado.** Ao término, fechar `JobLancadorPonte` e confirmar via
-  `NtQuerySystemInformation` que nenhum descendente sobreviveu.
-- **G9 — Integridade operacional / falha fechada.** Versão/hash/config/origem do executável e do pwsh;
-  nenhum resultado inconclusivo convertido em sucesso.
-
----
-
-## 4. GATE EMPÍRICO (pré-condição de QUALQUER implementação da 4.2)
-
-Antes de escrever o código de G1–G9, rodar no Windows real (notebook, pwsh portátil aprovado) um **spike de
-topologia** isolado, que NÃO implementa a solução e NÃO toca congelados:
-
-- **L-JOB-TOPO.** Criar `JobLancadorPonte` (KILL_ON_JOB_CLOSE, sem SILENT_BREAKAWAY), associar um processo
-  "controlador" simulado; deixar o `acao-pe.ps1` criar `JobPE` com `RestringirUI` e
-  `AssignProcessToJobObject` do executor suspenso. **Aceite:** `AssignProcessToJobObject` SUCESSO; filho do
-  `acao-pe` reporta `em_job=True`, `flags=0x2000` (sem SILENT_BREAKAWAY); `RestringirUI` preservado; nenhum
-  breakaway não autorizado na hierarquia. (= Prova 1 do Gemini + exigência de topologia do ChatGPT.)
-- **L-JOB-KILL.** Árvore viva (lancador-ponte → controlador → claude-ponte → acao-pe → executor → neto);
-  matar abruptamente o `lancador-ponte.ps1`; provar por (PID, CreateTime) que TODA a cadeia morreu. (= Prova 2.)
-
-**Resultado PASSA** → objeção de Q3 empiricamente respondida; implementar G1–G9 + bateria §5.
-**Resultado FALHA** → `AssignProcessToJobObject` incompatível com `RestringirUI` aninhado; NÃO relaxar a UI
-do PE; voltar à mesa para alternativa arquitetural de contenção.
+- **G1 — Job de supervisão.** `JobLancadorPonte` com `KILL_ON_JOB_CLOSE` (0x2000), sem `BREAKAWAY_OK`/
+  `SILENT_BREAKAWAY_OK`; controlador `CREATE_SUSPENDED` → `AssignProcessToJobObject` → associação COMPROVADA →
+  só então `ResumeThread`. Falha de associação encerra o suspenso (sem executar código) com confirmação de morte.
+  Handle do job **não-herdável** (sem vazamento que mantenha o job vivo). Falha de Job → **exit 24**.
+- **G2 — Exclusão mútua (H7).** Mutexes nomeados por `EstadoDir` e `RazaoDir`, nomes/canonização compatíveis com
+  o B-05, adquiridos antes do despacho e mantidos por TODA a vida do controlador (inclusive reconciliação pós).
+  Concorrência → **exit 20**.
+- **G3 — Vínculo persistente bidirecional (E76-03).** Criar vínculo só quando ambos os lados ausentes e o razão
+  sem histórico incompatível; recusar unilateral/incompleto/divergente ou razão histórico associado indevido →
+  **exit 30** (nada gravado no RazaoDir).
+- **G4 — Finanças (E76-04/H8/H9).** Distinguir base histórica B, custo conhecido K, reserva pendente R
+  (`teto×(1+folga)`) e custo desconhecido. Admissão: **B + K + R + T(1+F) ≤ M** → senão **exit 23**.
+  Reconciliar `estado.json == B + K` antes e depois → divergência **exit 28** + trava durável. Dados
+  inconclusivos → bloqueio. Reserva pendente **não** exige LIBERACAO_HUMANA (≠ contenção).
+- **G5 — Contenção e processo anterior (E76-01/P4).** Descendentes por (PID + CreateTime) via
+  `NtQuerySystemInformation`; descendente fora do Job / violação sem LIBERACAO_HUMANA válida → **exit 29**;
+  evidência durável; tratamento restrito de processo pré-existente como no B-05 (dispensa qualificada ou **exit 22**).
+- **G6 — Rótulos de integridade (B05-F09).** Aplicar e RELER via `GetNamedSecurityInfo`: RepoPath Low = 4096 no
+  estágio em que o executor edita; `.git`, `.git/config`, `.git/hooks` e metadados protegidos **Médio ≥ 8192**;
+  `RazaoDir` e segredos com `NO_READ_UP` (mask&2). Repositório recém-criado: aplicar rótulos de confiança e reler
+  ANTES de autorizar executor Low (nunca presumir Low no início). Indeterminado/reprovado → **exit 31**.
+- **G7 — Reparse points (B05-F10).** `B05LowIL-ReparsePoints` pré e pós (fail-closed se `Ok=false` ou `Pontos>0`).
+- **G8 — Encerramento verificado.** Fechar `JobLancadorPonte`; confirmar via `NtQuerySystemInformation` nenhum
+  descendente sobrevivente; sem handle remanescente que impeça `KILL_ON_JOB_CLOSE`.
+- **G9 — Integridade operacional / falha fechada.** Gate do pwsh (C4-F02 → exit 27/pwsh), âncora de manifesto
+  (C4-F03 → exit 97), versão/hash/config/origem; nenhum resultado inconclusivo convertido em sucesso.
 
 ---
 
-## 5. Bateria negativa consolidada (união Gemini 6 + ChatGPT 9) — acceptance da 4.2
+## 4. GATE EMPÍRICO (pré-condição de QUALQUER implementação da 4.2) — v2 com complementos do ChatGPT
 
-| ID | Garantia | Cenário negativo → aceite | Mapeamento |
-| --- | --- | --- | --- |
-| L-JOB-TOPO | G1 topologia | associação aninhada + RestringirUI compatível (§4) | ChatGPT F01-T01 / Gemini Prova 1 |
-| L-JOB-ASSOC | G1 fail-closed | falha de associação a Job / incompat. UI → nenhum executor não confiável roda | ChatGPT F01-T01 |
-| L-JOB-KILL | G1 cascata | matar lancador-ponte → controlador+executor+neto morrem (PID+CreateTime), sem conflitar com JobPE | Gemini L-JOB-KILL / ChatGPT F01-T02 |
-| L-MUTEX | G2 | 2ª instância no mesmo EstadoDir/RazaoDir → aborta com exit 23, sem tocar Git/estado/razão | Gemini L-MUTEX / ChatGPT F01-T03 |
-| L-VINC | G3 | parear EstadoDir novo com RazaoDir vinculado / vínculo adulterado → exit 28 antes do controlador | Gemini L-VINC / ChatGPT F01-T04 |
-| L-RECON-PRE | G4 | `custo_acumulado_usd` ≠ B+K, ou reserva órfã sem LIBERACAO_HUMANA → exit 28, controlador não sobe | Gemini L-RECON-PRE / ChatGPT F01-T05 |
-| L-RECON-POS | G4 | divergência financeira ao final → trava + exit 28 | Gemini L-RECON-POS / ChatGPT F01-T06 |
-| L-ADMIS | G4 | orçamento insuficiente considerando reservas pendentes → sem nova chamada cobrável | ChatGPT F01-T07 |
-| L-CONTEN | G5 | processo anterior / violação de contenção sem liberação humana → nova execução bloqueada | ChatGPT F01-T08 |
-| L-ROTULO-31 | G6 | `.git` em Low IL ou `RazaoDir` sem NO_READ_UP → releitura detecta, exit 31 antes do controlador | Gemini L-ROTULO-31 / B05-F09 |
-| L-REPARSE | G7 | reparse point plantado na árvore (pré ou pós) → fail-closed | Gemini B05-F10 |
-| L-C6-CONC | G5/C6 | morte em in_progress + lease sobrevivente → nenhum rollback/despacho enquanto o processo anterior puder escrever | ChatGPT F01-T09 |
+Spike isolado no Windows real, pwsh portátil aprovado, sem tocar congelados, sem implementar a solução:
 
-Cada negativo registra: ação tentada, identidade do processo (PID+CreateTime), código Windows, exit code,
-razão e efeito sobre o Git quando pertinente. Agrupamento de verificações num mesmo cenário é permitido
-(ChatGPT): são 12 PROPRIEDADES comprovadas, não 12 execuções independentes.
+**L-JOB-TOPO — reproduzir a cadeia efetiva** `JobLancadorPonte → controlador → claude-ponte → acao-pe → JobPE →
+executor Low` e comprovar:
+1. Controlador suspenso, associado e só então retomado.
+2. Executor criado suspenso e associado ao `JobPE` antes de executar.
+3. Associação do executor verificada **no Job supervisor E no JobPE** (dupla verificação).
+4. Job supervisor com `KILL_ON_JOB_CLOSE`, sem breakaway.
+5. `JobPE` com `KILL_ON_JOB_CLOSE`, `RestringirUI` (0x27) preservado, sem breakaway.
+6. Mesmo resultado na invocação separada da fase de teste.
+7. Todos os resultados de API e erros do Windows registrados.
+A documentação Microsoft prevê restrições de UI para Jobs aninhados → **inconclusivo ou falha de associação REPROVA**.
 
-**Código de saída proposto p/ concorrência (G2):** exit **23** (livre; não colide com 22/26/28/29/31/70/97) —
-a confirmar pela mesa.
+**L-JOB-KILL —** matar abruptamente o lançador com a cadeia viva; comprovar por (PID + CreateTime) o encerramento
+de controlador, embrulho, executor, teste (quando aplicável) e netos; demonstrar ausência de handle remanescente.
+
+**Falha de associação —** injetar falha entre criação suspensa e associação; comprovar **limpeza do suspenso órfão**
+(ou prevenção equivalente). Reusar como referência os testes N10 do B-05 (`-TesteFalharAssociacao`,
+`-TesteHandleHerdavel`). `PROC_THREAD_ATTRIBUTE_JOB_LIST` só como ALTERNATIVA a avaliar se o procedimento
+tradicional não cumprir as invariantes — nenhuma substituição arquitetural automática autorizada.
+
+**PASSA** → implementar G1–G9 + bateria §5 (contrato corrigido). **FALHA** → NÃO relaxar `RestringirUI` nem
+habilitar breakaway; retornar com evidências da incompatibilidade para decisão focal da mesa.
 
 ---
 
-## 6. O que vai à mesa agora (Perplexity pendente + ratificação)
+## 5. Bateria negativa consolidada (12 propriedades) — v2 com códigos do B-05
 
-ChatGPT pediu "uma única rodada de reconciliação focal com Gemini e Perplexity" sobre: (i) topologia de
-Jobs; (ii) compatibilidade das restrições de UI; (iii) completude das garantias B-05; (iv) bateria negativa
-mínima. A **Perplexity ainda não emitiu parecer focal de C4-F01**. Então:
+| ID | Garantia | Cenário negativo → aceite (código) |
+| --- | --- | --- |
+| L-JOB-TOPO | G1 topologia | associação aninhada + RestringirUI compatível (§4); inconclusivo REPROVA |
+| L-JOB-ASSOC | G1 fail-closed | falha de associação/UI → nenhum executor roda; suspenso órfão limpo (**24**) |
+| L-JOB-KILL | G1 cascata | matar lancador-ponte → controlador+executor+neto morrem (PID+CreateTime), sem conflitar com JobPE |
+| L-MUTEX | G2 | 2ª instância no mesmo EstadoDir/RazaoDir → aborta **exit 20**, sem tocar Git/estado/razão |
+| L-VINC | G3 | parear estado novo com razão vinculado / vínculo adulterado → **exit 30** (nada no RazaoDir) |
+| L-RECON-PRE | G4 | `estado.json ≠ B+K` antes → **exit 28**, controlador não sobe |
+| L-RECON-POS | G4 | divergência financeira ao final → trava + **exit 28** |
+| L-ADMIS | G4 | `B+K+R+T(1+F) > M` (orçamento insuficiente c/ reservas) → **exit 23**, sem chamada cobrável |
+| L-CONTEN | G5 | processo anterior / violação sem LIBERACAO_HUMANA → **exit 29**, execução bloqueada |
+| L-ROTULO-31 | G6 | `.git` em Low, Médio `<8192`, ou `RazaoDir` sem NO_READ_UP → **exit 31** antes do controlador |
+| L-REPARSE | G7 | reparse point plantado (pré/pós) → fail-closed |
+| L-C6-CONC | G5/C6 | morte em in_progress + lease vivo → sem rollback/despacho enquanto o anterior puder escrever |
 
-1. Submeto esta especificação (§3–§5) + o gate empírico (§4) à mesa.
-2. Pergunto à **Perplexity** (parecer focal) e confirmo com **Gemini/ChatGPT**:
-   - **P1.** A lista G1–G9 está COMPLETA quanto às garantias do B-05, ou falta item?
-   - **P2.** O gate L-JOB-TOPO/L-JOB-KILL (§4) é suficiente para decidir o risco de Job aninhado × RestringirUI
-     antes de implementar?
-   - **P3.** A bateria §5 é o conjunto MÍNIMO aceito para fechar C4-F01, ou exige acréscimo?
-   - **P4.** Exit 23 para concorrência (G2) é aceitável?
-3. Havendo convergência material, autorizo a candidata 4.2 CONTROLADA (gate empírico primeiro, depois G1–G9
-   + bateria), sem reabrir achados fechados.
+Incluir nos grupos: prova de **ausência de suspenso órfão**, **verificação simultânea dos dois Jobs**, e os
+cenários de **primeira inicialização** e **razão histórico**. Cada negativo registra: tentativa efetiva,
+(PID+CreateTime), códigos Windows, código final, eventos do razão e efeitos sobre o Git. Falha esperada nunca
+vira verde sem demonstrar a tentativa. Agrupamento permitido (12 PROPRIEDADES, não 12 execuções).
+
+---
+
+## 6. Autorizações e limites (consolidado do Ato 163)
+
+- **Gemini:** ratificação INTEGRAL; autoriza o avanço imediato à 4.2 controlada (gate primeiro).
+- **ChatGPT:** ratificação CONDICIONAL — autoriza (1) incorporar as correções na spec [FEITO nesta v2];
+  (2) executar o gate isolado L-JOB-TOPO/L-JOB-KILL + verificações de falha; (3) se aprovado e com Gemini
+  ratificando [FEITO], prosseguir à implementação G1–G9 + bateria; (4) preservar a 4.1 e entregar nova candidata
+  com commit, hashes, diffs e evidências.
+- **NÃO autorizado:** relaxar UI do PE, habilitar breakaway, modificar congelados, provisionar V2, ativar cobrança,
+  implantar ou executar operacionalmente sem assistência. R1/B-07/aprovação humana em vigor. PE-F11/REQ-09 aberto.
+
+**Situação:** os dois auditores ratificaram a arquitetura aditiva; as correções contratuais estão incorporadas e
+são o contrato congelado do B-05. Resta o **gate empírico no Windows real** — única coisa que ainda decide o
+C4-F01 — e, passando, a implementação controlada da 4.2.
 
 ---
 
 ## 7. Estado
 
 - Candidata 4.1 CONGELADA E PRESERVADA (`0c1f2fe`, 137/137); `b6d8d44` intacta.
-- Convergentes C4-F02/F03/C6: **FECHADOS e RATIFICADOS** (Gemini Ato 155).
-- C4-F01: APROVADA a arquitetura aditiva; **implementação condicionada** ao gate empírico (§4) e à
-  convergência focal (Perplexity pendente). Nenhum código escrito; congelados com diff VAZIO.
-- BLOQUEADOS mantidos: deploy, V2, provisionamento, cobrança/ativação financeira, execução desassistida;
-  R1/B-07/aprovação humana em vigor; PE-F11/REQ-09 aberto p/ V2.
+- Convergentes C4-F02/F03/C6: FECHADOS e RATIFICADOS.
+- C4-F01: arquitetura aditiva G1–G9 **RATIFICADA pelos dois auditores**; códigos alinhados ao contrato B-05;
+  **implementação condicionada ao gate empírico (§4)**. Nenhum código escrito; congelados com diff VAZIO.
+- BLOQUEADOS mantidos: deploy, V2, provisionamento, cobrança/ativação financeira, execução desassistida.
 
 ---
 
-ASSUNTO: Especificação aditiva C4-F01 (candidata 4.2) consolidando Gemini+ChatGPT (Ato 155) + gate empírico de topologia de Jobs; reconciliação focal pendente da Perplexity
-PROGRESSO: 99% (ponderado) — convergentes fechados; C4-F01 com arquitetura aprovada e implementação condicionada ao gate de topologia
-HORÁRIO: 25/10/2026 — 11:33 UTC-4 Vilhena
-Claude (Opus 4.8) Auditor Principal Ato 158
-ENVIAR PARA: Perplexity (parecer focal P1–P4); cópia Gemini e ChatGPT
+ASSUNTO: Espec C4-F01 v2 — ratificada por Gemini (integral) e ChatGPT (condicional); códigos corrigidos para o contrato B-05 congelado (verificado); resta o gate empírico no Windows
+PROGRESSO: 99% (ponderado) — arquitetura ratificada 2/2; implementação condicionada ao gate empírico (precisa do notebook)
+HORÁRIO: 25/10/2026 — 13:47 UTC-4 Vilhena
+Claude (Opus 4.8) Auditor Principal Ato 164
+ENVIAR PARA: Leandro (próximo passo = gate no notebook); cópia mesa (Gemini, ChatGPT) para registro da v2
 
-FASE ATUAL (C4-F01: arquitetura aprovada → gate de topologia + Perplexity): ████████████████████░ 97%
+FASE ATUAL (C4-F01: ratificado 2/2 → gate empírico pendente de Windows): ████████████████████░ 98%
 PROJETO TOTAL (Ponte V1 / gate de isolamento): ████████████████████░ 99%
