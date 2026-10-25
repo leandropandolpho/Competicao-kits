@@ -16,6 +16,11 @@ $fake = (Resolve-Path (Join-Path $raiz '..\..\testes\fake-executor.ps1')).Path
 . (Resolve-Path (Join-Path $raiz '..\ponte-pu.ps1')).Path   # p/ PU-Lease-Gravar no C6
 $PwshAprovado = (Get-Process -Id $PID).Path
 $shaPwsh = (Get-FileHash -LiteralPath $PwshAprovado -Algorithm SHA256).Hash
+# hashes_nucleo reais (R-04): claude-ponte agora EXIGE o mapa completo na config antes do dot-source.
+$nucleoMap = [ordered]@{ 'ponte-pu.ps1'=(Join-Path $raiz '..\ponte-pu.ps1'); 'acao-pe.ps1'=$acao
+  'b05job.ps1'=(Join-Path $raiz '..\..\b05job.ps1'); 'baixa-integridade.ps1'=(Join-Path $raiz '..\..\baixa-integridade.ps1')
+  'razao.ps1'=(Join-Path $raiz '..\..\razao.ps1') }
+$hashesNucleo = [ordered]@{}; foreach ($k in $nucleoMap.Keys) { $hashesNucleo[$k] = (Get-FileHash -LiteralPath $nucleoMap[$k] -Algorithm SHA256).Hash }
 $ok = 0; $tot = 0
 function Checar($n,[bool]$c,[string]$d=''){ $script:tot++; if($c){ $script:ok++; "[ok] $n" } else { "[FALHA] $n $d" } }
 if (-not $IsWindows) { "INTEGRA: so Windows."; exit 0 }
@@ -37,7 +42,8 @@ function Novo-Ambiente {
   $cfg = [ordered]@{ execucao=$execucao; teto_chamada_usd=0.5; folga=0.25; orcamento_usd=100.0
     executor=$PwshAprovado; executor_prefixo="-NoProfile|-File|$fake"
     ponte_dir=$ponte; acao_pe=$acao; pwsh_aprovado=$PwshAprovado; pwsh_sha256=$shaPwsh
-    trava_dir=$trava; evidencia_dir=$evid; timeout_ponte_seg=60 }
+    trava_dir=$trava; evidencia_dir=$evid; timeout_ponte_seg=60
+    timeout_controlador_seg=180; hashes_nucleo=$hashesNucleo }
   [System.IO.File]::WriteAllText((Join-Path $ctrl "config-$execucao.json"), ($cfg | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
   return [pscustomobject]@{ Base=$base; Repo=$repo; Ctrl=$ctrl; Ponte=$ponte; Evid=$evid; Trava=$trava; Exec=$execucao }
 }
