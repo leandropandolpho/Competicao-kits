@@ -14,7 +14,7 @@ function Linha($s){ $L.Add($s); Write-Host $s }
 
 # SHA-256 esperado (workspace, pre-entrega). Confere integridade da entrega antes de rodar.
 $esperado = [ordered]@{
-  "$pe\lancador-ponte.ps1"        = '57C0880AD3CA2129D5A713E4ECD56BADD44FF00E7ECDDD2926CA80C9C5ABA5D0'
+  "$pe\lancador-ponte.ps1"        = '9FD3041FB8299EC0786CB4B8514B35198C65A2E898E867804285DAA169D01F3A'
   "$pe\lancador-ponte.cmd"        = '97F2F92B49C9CCFBE734EF287FA57892491C69A578D95B60CE4F48E9FAE6E41E'
   "$pe\hashes-nucleo-aprovado.json" = '979699AA1CE6F0744A2820B9DF86CFAFDAF593C87F02C835B5EA381BB4247A10'
   "$pe\claude-ponte.ps1"          = '7AE5A32061E6A0D871298186DBC1DF3B3135DF6432E5E696BF69C8117157C170'

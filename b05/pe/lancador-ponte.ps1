@@ -108,6 +108,36 @@ if (Test-Path -LiteralPath $trava) {
   }
 }
 
+# --- G2 (H7): exclusao mutua por EstadoDir E RazaoDir (mutex nomeado), mantida por TODA a execucao -> concorrencia=exit 20.
+# --- G3 (E76-03): vinculo persistente bidirecional estado<->razao -> divergente/incompleto/razao-ja-usado=exit 30.
+# Espelha o lancador.ps1 B-05 (61-89); reusa razao.ps1 congelado. Codigos do contrato B-05.
+. (Join-Path $raizPe '..\razao.ps1')
+$estadoCan = [IO.Path]::GetFullPath($EstadoDir).TrimEnd('\')
+$razaoCan  = [IO.Path]::GetFullPath($CtrlDir).TrimEnd('\')
+function Tomar-Trava([string]$nome){ $m=[System.Threading.Mutex]::new($false,$nome); $ok=$false
+  try{ $ok=$m.WaitOne(0) }catch{ $ex=$_.Exception; while($ex -and -not ($ex -is [System.Threading.AbandonedMutexException])){$ex=$ex.InnerException}; if($ex){$ok=$true}else{throw} }
+  return @{ Mutex=$m; Ok=$ok } }
+$script:mtxE = Tomar-Trava ((Razao-Nome-Trava $estadoCan) + '-ponte-estado')
+if (-not $script:mtxE.Ok) { [Console]::Error.Write("G2: ja existe um lancador ativo para o estado $estadoCan"); exit 20 }
+$script:mtxR = Tomar-Trava ((Razao-Nome-Trava $razaoCan) + '-ponte-razao')
+if (-not $script:mtxR.Ok) { [Console]::Error.Write("G2: ja existe um lancador ativo para o razao $razaoCan"); exit 20 }
+$vR = Join-Path $CtrlDir 'vinculo.json'; $vE = Join-Path $EstadoDir 'b05-vinculo.json'
+$rzV = Razao-Ler $CtrlDir
+$criarVinculo = $false
+if ((Test-Path -LiteralPath $vR) -or (Test-Path -LiteralPath $vE)) {
+  if (-not ((Test-Path -LiteralPath $vR) -and (Test-Path -LiteralPath $vE))) { [Console]::Error.Write('G3: vinculo incompleto estado<->razao'); exit 30 }
+  $jr = Get-Content -LiteralPath $vR -Raw | ConvertFrom-Json; $je = Get-Content -LiteralPath $vE -Raw | ConvertFrom-Json
+  if ("$($jr.estado_dir)" -ne $estadoCan -or "$($je.razao_dir)" -ne $razaoCan -or "$($jr.id)" -ne "$($je.id)") { [Console]::Error.Write("G3: vinculo divergente (razao->'$($jr.estado_dir)', estado->'$($je.razao_dir)')"); exit 30 }
+} else {
+  if ($rzV.Ok -and @($rzV.Eventos | Where-Object { $_.evento -in @('inicio','fim','base_historica') }).Count) { [Console]::Error.Write('G3: razao ja usado e sem vinculo'); exit 30 }
+  $criarVinculo = $true
+}
+if ($criarVinculo) {
+  $vid = [guid]::NewGuid().ToString('N')
+  [IO.File]::WriteAllText($vR, (@{ id=$vid; estado_dir=$estadoCan; criado=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json), $Utf8)
+  [IO.File]::WriteAllText($vE, (@{ id=$vid; razao_dir=$razaoCan; criado=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json), $Utf8)
+}
+
 # --- G1/G5/G8 (C4-F01, Ato 165): Job de supervisao do controlador. ADITIVO; espelha o lancador.ps1 B-05 (144-302).
 # O lancador se associa a um Job KILL_ON_JOB_CLOSE (sem breakaway); o controlador sobe como FILHO e HERDA o Job
 # (contido desde a criacao, sem janela de corrida). Verificacao continua de descendentes externos (G5). Encerramento
