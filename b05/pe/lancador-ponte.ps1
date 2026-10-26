@@ -108,7 +108,43 @@ if (Test-Path -LiteralPath $trava) {
   }
 }
 
-# So agora sobe o controlador real. A ponte e escolhida pelos parametros ClaudeCmd/TestCmd (externo; nada congelado muda).
+# --- G1/G5/G8 (C4-F01, Ato 165): Job de supervisao do controlador. ADITIVO; espelha o lancador.ps1 B-05 (144-302).
+# O lancador se associa a um Job KILL_ON_JOB_CLOSE (sem breakaway); o controlador sobe como FILHO e HERDA o Job
+# (contido desde a criacao, sem janela de corrida). Verificacao continua de descendentes externos (G5). Encerramento
+# verificado (G8). Codigos do contrato B-05: 24 (Job) / 29 (contencao). Gate empirico (Ato 165) comprovou a topologia.
+. (Join-Path $raizPe '..\b05job.ps1')
+function PonteEvid([string]$evt,[hashtable]$dados){
+  try { $o=[ordered]@{ evento=$evt; execucao=$ExecId; utc=(Get-Date).ToUniversalTime().ToString('o') }
+        foreach($k in $dados.Keys){ $o[$k]=$dados[$k] }
+        $f=Join-Path $evid ("g1-$evt-$([guid]::NewGuid().ToString('N').Substring(0,8)).json")
+        [IO.File]::WriteAllText($f,($o|ConvertTo-Json -Depth 6),$Utf8) } catch { }
+}
+$job = [B05Job]::CreateJobObject([IntPtr]::Zero, $null)
+if ($job -eq [IntPtr]::Zero) { [Console]::Error.Write("G1: CreateJobObject falhou ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))"); exit 24 }
+if (-not [B05Job]::Configurar($job, [B05Job]::KILL_ON_JOB_CLOSE)) { [Console]::Error.Write('G1: Configurar(KILL_ON_JOB_CLOSE) falhou'); exit 24 }
+$fl = [B05Job]::Flags($job)
+if ($fl -lt 0 -or -not ($fl -band [B05Job]::KILL_ON_JOB_CLOSE) -or ($fl -band ([B05Job]::BREAKAWAY_OK -bor [B05Job]::SILENT_BREAKAWAY_OK))) { [Console]::Error.Write(("G1: limites do job inesperados: 0x{0:X}" -f $fl)); exit 24 }
+if ($env:PONTE_TESTE_HANDLE_HERDAVEL -eq '1') { [void][B05Job]::SetHandleInformation($job, [B05Job]::HANDLE_FLAG_INHERIT, [B05Job]::HANDLE_FLAG_INHERIT) }   # negativo L-JOB-ASSOC
+$hf = [uint32]0
+if (-not [B05Job]::GetHandleInformation($job, [ref]$hf)) { [Console]::Error.Write('G1: GetHandleInformation falhou'); exit 24 }
+if ($hf -band [B05Job]::HANDLE_FLAG_INHERIT) { [Console]::Error.Write('G1: handle do job e herdavel'); exit 24 }
+$eu = [B05Job]::GetCurrentProcess()
+$assoc = if ($env:PONTE_TESTE_FALHAR_ASSOC -eq '1') { $false } else { [B05Job]::AssignProcessToJobObject($job, $eu) }   # negativo L-JOB-ASSOC
+$instanteAssoc = [DateTime]::UtcNow.ToFileTimeUtc()
+if (-not $assoc) { [Console]::Error.Write("G1: AssignProcessToJobObject(self) falhou ($([Runtime.InteropServices.Marshal]::GetLastWin32Error()))"); exit 24 }
+$dentro = $false
+if (-not [B05Job]::IsProcessInJob($eu, $job, [ref]$dentro) -or -not $dentro) { [Console]::Error.Write('G1: lancador nao esta no job apos associacao'); exit 24 }
+[B05Job]::Rastrear([uint32]$PID)
+$criacaoLanc = [B05Job]::Verificados[[uint32]$PID]
+$raizL = [System.Collections.Generic.Dictionary[uint32,long]]::new(); $raizL[[uint32]$PID] = $criacaoLanc
+# Dispensa do conhost pre-existente do lancador (filho do lancador, System32\conhost.exe, criado antes da associacao).
+foreach ($x in @([B05Job]::Subarvore($raizL))) {
+  $pp = $x -split '\|'; $info = "$([B05Job]::Info([uint32]$pp[0]))"; $cam = if ($info) { ($info -split '\|',2)[1] } else { '' }
+  if (($cam -like '*\System32\conhost.exe') -and ([long]$pp[3] -le $instanteAssoc)) { [B05Job]::PreExistentes[[uint32]$pp[0]] = [long]$pp[3] }
+  else { PonteEvid 'preexistente_nao_dispensavel' @{ alvo=$x; caminho=$cam }; [void][B05Job]::TerminateJobObject($job,24); exit 24 }
+}
+
+# Sobe o controlador real como FILHO (herda o Job). A ponte e escolhida por ClaudeCmd/TestCmd (externo; nada congelado muda).
 $psi = [System.Diagnostics.ProcessStartInfo]::new($PwshPortatil)
 foreach ($a in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$Controlador,
     '-RepoPath',$RepoPath,'-TarefasPath',$TarefasPath,'-EstadoDir',$EstadoDir,
@@ -117,8 +153,40 @@ foreach ($a in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$Controlador,
 $psi.UseShellExecute = $false; $psi.WorkingDirectory = $RepoPath
 $psi.Environment['B05_PWSH'] = $PwshPortatil; $psi.Environment['B05_DIR'] = $CtrlDir; $psi.Environment['B05_EXECUCAO'] = $ExecId
 $psi.Environment['PATH'] = (Split-Path $PwshPortatil) + ';' + $psi.Environment['PATH']
-$p = [System.Diagnostics.Process]::Start($psi); $p.WaitForExit()
-$cod = $p.ExitCode
+$ctl = [System.Diagnostics.Process]::Start($psi)
+# G1: o controlador DEVE estar no job (herdou) antes de qualquer verificacao. Senao, contencao violada.
+$dctl = $false; [void][B05Job]::IsProcessInJob($ctl.Handle, $job, [ref]$dctl)
+if (-not $dctl) { PonteEvid 'contencao_violada' @{ detalhe="controlador $($ctl.Id) fora do job" }; [void][B05Job]::TerminateJobObject($job, 29); exit 29 }
+[B05Job]::Rastrear([uint32]$ctl.Id)
+# G5: verificacao continua de descendentes EXTERNOS ao job enquanto o controlador vive (identidade PID+criacao).
+while (-not $ctl.HasExited) {
+  $viol = [B05Job]::Verificar($job)
+  if ($viol.Count) {
+    PonteEvid 'contencao_violada' @{ violacoes=@($viol) }
+    $alvos = [System.Collections.Generic.Dictionary[uint32,long]]::new()
+    foreach ($y in $viol) { $q = $y -split '\|'; $pv=[uint32]0; $cv=[long]0
+      if ([uint32]::TryParse($q[0],[ref]$pv) -and $pv -ne 0 -and [long]::TryParse($q[3],[ref]$cv) -and $cv -gt 0) { $alvos[$pv]=$cv } }
+    $resx = [System.Collections.Generic.List[string]]::new()
+    foreach ($kv in @($alvos.GetEnumerator())) { $resx.Add("$($kv.Key)|externo|$([B05Job]::Encerrar($kv.Key,$kv.Value))") }
+    for ($pass=0; $pass -lt 5; $pass++) {
+      $novos = @([B05Job]::Subarvore($alvos) | Where-Object { -not $alvos.ContainsKey([uint32](($_ -split '\|')[0])) })
+      if (-not $novos.Count) { break }
+      foreach ($y in $novos) { $q=$y -split '\|'; $alvos[[uint32]$q[0]]=[long]$q[3]; $resx.Add("$y|desc|$([B05Job]::Encerrar([uint32]$q[0],[long]$q[3]))") }
+    }
+    PonteEvid 'externos_encerramento' @{ resultados=@($resx) }
+    [void][B05Job]::TerminateJobObject($job, 29); exit 29
+  }
+  Start-Sleep -Milliseconds 100
+}
+$ctl.WaitForExit(); $cod = $ctl.ExitCode
+
+# G8: encerramento verificado — nenhum descendente externo do lancador sobreviveu (fora os pre-existentes dispensados).
+$sobra = @([B05Job]::Subarvore($raizL) | Where-Object { $q=($_ -split '\|'); ([uint32]$q[0] -ne $PID) -and (-not [B05Job]::PreExistentes.ContainsKey([uint32]$q[0])) })
+if ($sobra.Count) {
+  PonteEvid 'sobreviventes_pos' @{ sobra=@($sobra) }
+  foreach ($y in $sobra) { $q=$y -split '\|'; [void][B05Job]::Encerrar([uint32]$q[0],[long]$q[3]) }
+}
+
 # C-02: ao fim, deixa explicita qualquer trava remanescente.
 $tv2 = PU-Trava-Ativa $trava
 if ($tv2.Ativa) { [Console]::Error.Write("lancador: TRAVA $($tv2.Tipo.ToUpper()) remanescente - $($tv2.Detalhe)") }
