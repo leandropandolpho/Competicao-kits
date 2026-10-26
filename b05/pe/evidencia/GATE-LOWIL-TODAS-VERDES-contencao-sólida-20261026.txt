@@ -1,0 +1,16 @@
+=== GATE LOW-IL (C4-F01 / C6-real) - 20261026-145036 UTC ===
+pwsh: C:\Users\piloto\piloto\ferramentas\pwsh-7.6.7\pwsh.exe  msix=False  sha_ok=True
+[OK]   SUP-self-assign - spike associado ao JobLancadorPonte (faz o papel do acao-pe)
+[OK]   SUP-em-job - spike em_job=True
+[OK]   LOWIL-token - CriarToken ('')
+[OK]   LOWIL-suspenso - LancarSuspenso pid=15556 ('')
+[OK]   LOWIL-herdou-supervisor - IsProcessInJob(low-IL, JobLancadorPonte)=True (em algum job=True) <-- PERGUNTA CENTRAL do C6-real
+[OK]   LOWIL-assoc-jpe - AssignProcessToJobObject(JobPE, low-IL)=True err=0
+[OK]   LOWIL-no-jpe - no JobPE=True
+[OK]   LOWIL-supervisor-depois - no JobLancadorPonte apos JobPE=True (nested: deveria seguir nos dois)
+[OK]   LOWIL-nao-flagrado-por-Verificar - Verificar(supervisor) violacoes=0 flagra_o_executor=False
+
+TOTAL GATE LOW-IL: TODAS VERDES - 20261026-145036
+LEITURA:
+  LOWIL-herdou-supervisor OK  -> executor herda o Job; a causa do C6-real e OUTRA (tracking/timing).
+  LOWIL-herdou-supervisor FALHA -> token nao herda o Job de supervisao; G5 o flagra -> confirma a hipotese (vai a mesa).
