@@ -1,0 +1,37 @@
+== L-OK: sem lease -> lancador grava config imutavel (hashes_nucleo) e sobe o controlador -> commit (done)
+[ok] L-OK: lancador saiu 0 (controlador done)
+[ok] L-OK: commit efetivado (HEAD avancou)
+[ok] L-OK: config gravada IMUTAVEL (somente-leitura)
+[ok] L-OK: config traz hashes_nucleo completo (R-04)
+== L-TRV: trava persistente (financeira 28) presente -> lancador NAO sobe o controlador (exit 26)
+[ok] L-TRV: lancador recusou subir, preservando 28 (financeira)
+[ok] L-TRV: controlador NAO comitou (HEAD=base)
+[ok] L-TRV: EstadoDir vazio (controlador nem iniciou)
+== L-PWSH (C4-F02, Ato 153): lancador com pwsh NAO aprovado (SHA diverge) -> recusa (31), controlador NAO sobe
+[ok] L-PWSH: pwsh nao aprovado -> exit 31
+[ok] L-PWSH: controlador NAO comitou (HEAD=base)
+[ok] L-PWSH: EstadoDir vazio (nem iniciou)
+== L-MANIF (C4-F03, Ato 153): nucleo diverge do MANIFESTO APROVADO -> FATAL (97), controlador NAO sobe
+[ok] L-MANIF: nucleo diverge do manifesto aprovado -> exit 97
+[ok] L-MANIF: controlador NAO comitou (HEAD=base)
+== PU-11b: lease de SUBARVORE VIVA -> lancador sai 22, controlador NAO sobe, sem git/rollback
+[ok] PU-11b: lancador saiu 22 (guarda anti-orfao vivo)
+[ok] PU-11b: controlador NAO subiu (HEAD=base, sem rollback)
+[ok] PU-11b: arquivo nao-rastreado PRESERVADO (nenhum git reset ocorreu)
+[ok] PU-11b: EstadoDir vazio (controlador nem iniciou)
+[ok] PU-11b: lease do vivo NAO foi removido (nao limpa lease vivo)
+== C6-real: encerramento ABRUPTO em tarefa in_progress -> nenhum commit; 2o lancador RETOMA com SEGURANCA (commit limpo XOR fail-close D-06)
+[ok] C6-real: PE chegou a executar (lease vivo gravado antes da morte)
+[ok] C6-real: morte abrupta NAO deixou commit (HEAD=base)
+[ok] C6-real: subarvore do PE confirmada MORTA e lease remanescente p/ a retomada conferir
+[ok] C6-real: T1 estava in_progress na morte (tentativas>=1)
+[ok] C6-real: retomada SEGURA (commit limpo XOR fail-close sem commit; nunca corrompe)
+[ok] C6-real: tarefa em estado TERMINAL (done/failed), nunca presa em in_progress
+[ok] C6-real: lease morto foi limpo no pre-flight (sem lease ao fim)
+[ok] C6-real: custo do razao preservado (> 0 apos retomada; reserva mantida se fail-close)
+[ok] C6-real: arvore de trabalho LIMPA apos a retomada (sem resto nao-commitado)
+[ok] C6-real: fail-close -> SEM commit (HEAD=base) e reserva mantida no razao
+
+TOTAL LANCADOR: 27 / 27
+
+--STDERR--
