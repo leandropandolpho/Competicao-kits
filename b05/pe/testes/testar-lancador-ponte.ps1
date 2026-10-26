@@ -181,5 +181,22 @@ if ($commitLimpo) {
   Checar 'C6-real: fail-close -> SEM commit (HEAD=base) e reserva mantida no razao' (($rC6b.HeadAgora -eq $bg.HeadBase) -and ((Custo $aC6) -gt 0))
 }
 
+"== L-MUTEX (G2): mutex do EstadoDir ocupado por outra instancia -> lancador NAO sobe (exit 20)"
+$aMX = Novo-Amb
+$estCanMX = [IO.Path]::GetFullPath($aMX.Estado).TrimEnd('\')
+$nomeMX = (Razao-Nome-Trava $estCanMX) + '-ponte-estado'
+$heldMX = [System.Threading.Mutex]::new($false, $nomeMX); [void]$heldMX.WaitOne(0)   # ocupa a trava do estado (como uma 1a instancia)
+try { $rMX = Rodar-Lancador $aMX 'ok:0.20' } finally { try { $heldMX.ReleaseMutex() } catch {}; $heldMX.Dispose() }
+Checar 'L-MUTEX: 2a instancia (mutex do estado ocupado) -> exit 20' ($rMX.Codigo -eq 20) "cod=$($rMX.Codigo) err=$($rMX.Erro)"
+Checar 'L-MUTEX: controlador NAO subiu (HEAD=base)' ($rMX.HeadAgora -eq $rMX.HeadBase)
+
+"== L-VINC (G3): vinculo estado<->razao DIVERGENTE -> lancador NAO sobe (exit 30)"
+$aVC = Novo-Amb
+[IO.File]::WriteAllText((Join-Path $aVC.Ctrl 'vinculo.json'), (@{ id='AAA'; estado_dir=([IO.Path]::GetFullPath($aVC.Estado).TrimEnd('\')); criado='x' } | ConvertTo-Json), $Utf8)
+[IO.File]::WriteAllText((Join-Path $aVC.Estado 'b05-vinculo.json'), (@{ id='BBB'; razao_dir=([IO.Path]::GetFullPath($aVC.Ctrl).TrimEnd('\')); criado='x' } | ConvertTo-Json), $Utf8)
+$rVC = Rodar-Lancador $aVC 'ok:0.20'
+Checar 'L-VINC: vinculo divergente (ids diferentes) -> exit 30' ($rVC.Codigo -eq 30) "cod=$($rVC.Codigo) err=$($rVC.Erro)"
+Checar 'L-VINC: controlador NAO subiu (HEAD=base)' ($rVC.HeadAgora -eq $rVC.HeadBase)
+
 "`nTOTAL LANCADOR: $ok / $tot"
 exit ([int]($ok -ne $tot))
