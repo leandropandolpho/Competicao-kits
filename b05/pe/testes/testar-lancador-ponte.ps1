@@ -137,9 +137,12 @@ function Reapar-Leases($amb) {
 "== C6-real: encerramento ABRUPTO em tarefa in_progress -> nenhum commit; 2o lancador RETOMA com SEGURANCA (commit limpo XOR fail-close D-06)"
 $aC6 = Novo-Amb
 $bg = Rodar-Lancador $aC6 'dorme:99' 180 60 2 -Bg
-# espera o PE entrar em execucao (lease vivo gravado pela ponte em N-08) - ate ~25s
+# espera o PE entrar em execucao (lease vivo gravado pela ponte em N-08). Janela ate ~50s: com o Job de supervisao
+# do G1 (C4-F01) o startup do controlador ganha alguns segundos (repro-c6: lease ~23.5s isolado; mais sob a carga da
+# matriz), e a antiga janela de 25s ficava na borda. 50s segue bem abaixo do TimeoutControladorSeg (180s). Nada de
+# contencao muda: o spike gate-lowil comprovou que o executor herda o Job e Verificar nao o flagra.
 $entrou = $false
-for ($i=0; $i -lt 50; $i++) { Start-Sleep -Milliseconds 500; if ((Test-Path $aC6.Trava) -and (LeasesVivos $aC6) -ge 1) { $entrou = $true; break } }
+for ($i=0; $i -lt 100; $i++) { Start-Sleep -Milliseconds 500; if ((Test-Path $aC6.Trava) -and (LeasesVivos $aC6) -ge 1) { $entrou = $true; break } }
 # morte ABRUPTA: mata a arvore do lancador E garante a morte da subarvore do PE do Job (determinismo, nao depende do /T).
 try { & taskkill /PID $bg.Proc.Id /T /F *>$null } catch {}
 try { $bg.Proc.WaitForExit(10000) | Out-Null } catch {}
